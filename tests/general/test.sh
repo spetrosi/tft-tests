@@ -1,0 +1,182 @@
+#!/bin/bash
+
+. /usr/share/beakerlib/beakerlib.sh || exit 1
+
+# test parameters:
+# ANSIBLE_VER
+#   ansible version to use for tests. E.g. "2.9" or "2.16".
+# REPO_NAME
+#   Name of the role repository to test.
+# PR_NUM
+#   Optional: Number of PR to test. If empty, tests the default branch.
+# SYSTEM_ROLES_ONLY_TESTS
+#  Optional: Space separated names of test playbooks to test. E.g. "tests_imuxsock_files.yml tests_relp.yml"
+#  If empty, tests all tests in tests/tests_*.yml
+
+rolesInstallAnsible() {
+    local ansible_pkg
+    if [ -z "$ANSIBLE_VER" ]; then
+        exit
+    fi
+    if [ "$ANSIBLE_VER" != "2.9" ]; then
+        # ansible_pkg="ansible-core-$ANSIBLE_VER"
+        ansible_pkg="ansible-core"
+        rlRun "yum -y install $ansible_pkg"
+        rlAssertRpm "$ansible_pkg"
+    else
+        # Install from container like tox-lsr
+        ansible_pkg="ansible"
+    fi
+}
+
+rolesClonePR() {
+    local role_path
+    if [ ! -d "$REPO_NAME" ]; then
+        rlRun "git clone https://github.com/linux-system-roles/$REPO_NAME.git"
+    fi
+    if [ -n "$PR_NUM" ]; then
+        rlRun "pushd $REPO_NAME || exit"
+        rlRun "git fetch origin pull/$PR_NUM/head:test_pr"
+        rlRun "git checkout test_pr"
+        rlRun "popd || exit"
+    fi
+    role_path="$PWD"/"$REPO_NAME"
+    return "$role_path"
+}
+
+# Handle Ansible Vault encrypted variables
+rolesHandleVault() {
+    local role_path=$1
+    local playbook_file=$2
+    local vault_pwd_file="$role_path/vault_pwd"
+    local vault_variables_file="$role_path/vars/vault-variables.yml"
+    local no_vault_file="$role_path/no-vault-variables.txt"
+    local vault_play
+
+    if [ -f "$vault_pwd_file" ] && [ -f "$vault_variables_file" ]; then
+        if grep -q "^${playbook_file}\$" "$no_vault_file"; then
+            rlLogInfo "Skipping vault variables because $3/$2 is in no-vault-variables.txt"
+        else
+            rlLogInfo "Including vault variables in $playbook_file"
+            vault_play="- hosts: all
+  gather_facts: false
+  tasks:
+    - name: Include vault variables
+      include_vars:
+        file: $vault_variables_file"
+            rlRun "sed -i \"s|---||$vault_play\" $playbook_file"
+        fi
+    else
+        rlLogInfo "Skipping vault variables because $vault_pwd_file and $vault_variables_file don't exist"
+    fi
+}
+
+rolesInstallDependencies() {
+    local coll_req_file="$1/meta/collection-requirements.yml"
+    local coll_test_req_file="$1/tests/collection-requirements.yml"
+    for req_file in $coll_req_file $coll_test_req_file; do
+        if [ ! -f "$req_file" ]; then
+            rlLogInfo "Skipping installing dependencies from $req_file, this file doesn't exist"
+        else
+            rlRun "ansible-galaxy collection install -p $2 -vv -r $req_file"
+            rlRun "export ANSIBLE_COLLECTIONS_PATHS=$2"
+            rlLogInfo "Dependencies were successfully installed"
+        fi
+    done
+}
+
+rolesEnableCallbackPlugins() {
+    # Enable callback plugins for prettier ansible output
+    callback_path=ansible_collections/ansible/posix/plugins/callback
+    if [ ! -f "$1"/"$callback_path"/debug.py ] || [ ! -f "$1"/"$callback_path"/profile_tasks.py ]; then
+        ansible_posix=$(mktemp -d)
+        rlRun "ansible-galaxy collection install ansible.posix -p $ansible_posix -vv"
+        if [ ! -d "$1"/"$callback_path"/ ]; then
+            rlRun "mkdir -p $1/$callback_path"
+        fi
+        rlRun "cp $ansible_posix/$callback_path/{debug.py,profile_tasks.py} $1/$callback_path/"
+        rlRun "rm -rf $ansible_posix"
+    fi
+    rlRun "ansible-config list | grep 'name: ANSIBLE_CALLBACKS_ENABLED'"
+    if ansible-config list | grep -q "name: ANSIBLE_CALLBACKS_ENABLED"; then
+        rlRun "export ANSIBLE_CALLBACKS_ENABLED=profile_tasks"
+    else
+        rlRun "export ANSIBLE_CALLBACK_WHITELIST=profile_tasks"
+    fi
+    rlRun "export ANSIBLE_STDOUT_CALLBACK=debug"
+}
+
+rolesConvertToCollection(){
+    local role_path=$1
+    local collection_path=$2
+    local collection_script_url=https://raw.githubusercontent.com/linux-system-roles/auto-maintenance/main
+    local coll_namespace=fedora
+    local coll_name=linux_system_roles
+    local subrole_prefix=private_"$REPO_NAME"_subrole_
+    rlRun "curl -L -o $role_path/lsr_role2collection.py $collection_script_url/lsr_role2collection.py"
+    rlRun "curl -L -o $role_path/runtime.yml $collection_script_url/lsr_role2collection/runtime.yml"
+    # Remove role that was installed as a dependencie
+    rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
+    rlRun "pip install ruamel.yaml"
+    rlRun "python3 $role_path/lsr_role2collection.py \
+        --src-owner linux-system-roles \
+        --role $REPO_NAME \
+        --src-path $role_path \
+        --dest-path $collection_path \
+        --namespace $coll_namespace \
+        --collection $coll_name \
+        --subrole-prefix $subrole_prefix \
+        --meta-runtime $role_path/runtime.yml"
+}
+
+rlJournalStart
+    rlPhaseStartSetup
+        required_vars=("ANSIBLE_VER" "REPO_NAME")
+        for required_var in "${required_vars[@]}"; do
+            if [ -z "${!required_var}" ]; then
+                rlDie "This required variable is unset: $required_var "
+            fi
+        done
+        if [ -n "$ANSIBLE_VER" ]; then
+            rolesInstallAnsible
+        else
+            rlLogInfo "ANSIBLE_VER not defined - using system ansible if installed"
+        fi
+        rolesClonePR
+        role_path="$PWD"/"$REPO_NAME"
+        for test_playbook in "$role_path"/tests/tests_*.yml; do
+            rolesHandleVault "$role_path" "$test_playbook"
+        done
+        collection_path=$(mktemp -d)
+        rolesInstallDependencies "$role_path" "$collection_path"
+        rolesEnableCallbackPlugins "$collection_path"
+        rolesConvertToCollection "$role_path" "$collection_path"
+        # Build inventory with localhost
+        inventory="$role_path/inventory.yml"
+        rlRun "echo \"---
+all:
+  hosts:
+    localhost:
+      ansible_connection: local
+\" > $inventory"
+    rlPhaseEnd
+
+    rlPhaseStartTest
+        tests_path="$collection_path"/ansible_collections/fedora/linux_system_roles/tests/"$REPO_NAME"/
+        test_playbooks=$(find "$tests_path" -maxdepth 1 -type f -name "tests_*.yml" -printf '%f\n')
+        for test_playbook in $test_playbooks; do
+            if [ -n "$SYSTEM_ROLES_ONLY_TESTS" ]; then
+                if echo "$SYSTEM_ROLES_ONLY_TESTS" | grep -q "$test_playbook"; then
+                    rlRun "ansible-playbook -i $inventory $tests_path$test_playbook -v"
+                fi
+            else
+                rlRun "ansible-playbook -i $inventory $tests_path$test_playbook -v"
+            fi
+        done
+    rlPhaseEnd
+
+    rlPhaseStartCleanup
+        rlRun "rm -r $collection_path" 0 "Remove tmp directory"
+        rlRun "rm -r $role_path" 0 "Remove role directory"
+    rlPhaseEnd
+rlJournalEnd

@@ -1,0 +1,8 @@
+summary: Test a system role
+test: ./test.sh
+framework: beakerlib
+duration: 2h
+tag: general
+require:
+    - git
+    - python3-pip

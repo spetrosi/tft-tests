@@ -2,7 +2,7 @@ summary: Test a system role
 test: ./test.sh
 framework: beakerlib
 duration: 2h
-tag: general
+tag: single_node
 require:
     - git
     - python

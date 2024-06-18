@@ -120,7 +120,7 @@ rolesConvertToCollection(){
     rlRun "curl -L -o $role_path/runtime.yml $collection_script_url/lsr_role2collection/runtime.yml"
     # Remove role that was installed as a dependencie
     rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
-    # rlRun "pip install ruamel.yaml"
+    rlRun "python -m pip install ruamel.yaml"
     rlRun "python $role_path/lsr_role2collection.py \
         --src-owner linux-system-roles \
         --role $REPO_NAME \

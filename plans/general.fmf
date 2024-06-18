@@ -1,11 +1,11 @@
 summary: A general test for a system role
 discover:
   - how: fmf
-    filter: tag:general
+    filter: tag:single_node
 execute:
     how: tmt
 environment:
     ANSIBLE_VER: 2.16
     REPO_NAME: logging
     # PR_NUM: 154
-    # SYSTEM_ROLES_ONLY_TESTS: tests_imuxsock_files.yml tests_relp.yml
+    SYSTEM_ROLES_ONLY_TESTS: tests_imuxsock_files.yml tests_relp.yml

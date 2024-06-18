@@ -5,4 +5,4 @@ duration: 2h
 tag: general
 require:
     - git
-    - python3-pip
+    - python

@@ -15,18 +15,21 @@
 
 rolesInstallAnsible() {
     local ansible_pkg
-    if [ -z "$ANSIBLE_VER" ]; then
-        exit
-    fi
-    if [ "$ANSIBLE_VER" != "2.9" ]; then
-        # ansible_pkg="ansible-core-$ANSIBLE_VER"
+    local pkg_cmd
+    if rlIsRHELLike ">=8.6" && [ "$ANSIBLE_VER" != "2.9" ]; then
+        pkg_cmd="dnf"
         ansible_pkg="ansible-core"
-        rlRun "yum -y install $ansible_pkg"
-        rlAssertRpm "$ansible_pkg"
+    elif rlIsRHELLike 8; then
+        pkg_cmd="dnf"
+        ansible_pkg="ansible-2.9"
     else
-        # Install from container like tox-lsr
+        # el7
+        pkg_cmd="yum"
         ansible_pkg="ansible"
+        rlRun "$pkg_cmd install epel-release -y"
     fi
+    rlRun "$pkg_cmd install $ansible_pkg -y"
+    rlAssertRpm "$ansible_pkg"
 }
 
 rolesClonePR() {
@@ -117,8 +120,8 @@ rolesConvertToCollection(){
     rlRun "curl -L -o $role_path/runtime.yml $collection_script_url/lsr_role2collection/runtime.yml"
     # Remove role that was installed as a dependencie
     rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
-    rlRun "pip install ruamel.yaml"
-    rlRun "python3 $role_path/lsr_role2collection.py \
+    # rlRun "pip install ruamel.yaml"
+    rlRun "python $role_path/lsr_role2collection.py \
         --src-owner linux-system-roles \
         --role $REPO_NAME \
         --src-path $role_path \

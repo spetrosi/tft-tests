@@ -1,7 +1,21 @@
 summary: A general test for a system role
+provision:
+  - name: control_node
+    how: virtual
+    connection: system
+  - name: managed_node
+    how: virtual
+    connection: system
+prepare:
+  - name: Add control_node public key to managed_node
+    how: shell
+    script: cat ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub > ~/.ssh/authorized_keys
+    where: managed_node
 discover:
-  - how: fmf
-    filter: tag:single_node
+  - name: Run test playbooks from control_node
+    how: fmf
+    filter: tag:test_playbooks
+    where: control_node
 execute:
     how: tmt
 environment:

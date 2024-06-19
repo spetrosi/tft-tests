@@ -16,7 +16,7 @@
 rolesInstallAnsible() {
     local ansible_pkg
     local pkg_cmd
-    if rlIsRHELLike ">=8.6" && [ "$ANSIBLE_VER" != "2.9" ]; then
+    if rlIsFedora || (rlIsRHELLike ">=8.6" && [ "$ANSIBLE_VER" != "2.9" ]); then
         pkg_cmd="dnf"
         ansible_pkg="ansible-core"
     elif rlIsRHELLike 8; then
@@ -109,7 +109,7 @@ rolesEnableCallbackPlugins() {
     rlRun "export ANSIBLE_STDOUT_CALLBACK=debug"
 }
 
-rolesConvertToCollection(){
+rolesConvertToCollection() {
     local role_path=$1
     local collection_path=$2
     local collection_script_url=https://raw.githubusercontent.com/linux-system-roles/auto-maintenance/main
@@ -132,8 +132,26 @@ rolesConvertToCollection(){
         --meta-runtime $role_path/runtime.yml"
 }
 
+rolesBuildInventory() {
+    local inventory=$1
+    local hostname=$2
+    declare -n host_params=$1
+    if [ ! -f "$inventory" ]; then
+    echo "---
+all:
+  hosts:" > "$inventory"
+    fi
+    echo "    $hostname:" >> "$inventory"
+    for key in "${!host_params[@]}"; do
+        echo "      ${key}: ${host_params[${key}]}" >> "$inventory"
+    done
+    rlRun "cat $inventory"
+}
+
 rlJournalStart
     rlPhaseStartSetup
+        rlRun "pwd"
+        rlRun "set -o pipefail"
         required_vars=("ANSIBLE_VER" "REPO_NAME")
         for required_var in "${required_vars[@]}"; do
             if [ -z "${!required_var}" ]; then
@@ -154,14 +172,18 @@ rlJournalStart
         rolesInstallDependencies "$role_path" "$collection_path"
         rolesEnableCallbackPlugins "$collection_path"
         rolesConvertToCollection "$role_path" "$collection_path"
-        # Build inventory with localhost
         inventory="$role_path/inventory.yml"
-        rlRun "echo \"---
-all:
-  hosts:
-    localhost:
-      ansible_connection: local
-\" > $inventory"
+        hostname=managed_node
+        tmt_tree_provision=${TMT_TREE%/*}/provision
+        # TMT_TOPOLOGY_ variables are not available in tmt try.
+        # Reading topology from guests.yml for compatibility with tmt try
+        guests_yml=${tmt_tree_provision}/guests.yaml
+        declare -A host_params
+        host_params[ansible_port]=$(< "$guests_yml" yq '.managed_node.port' )
+        host_params[ansible_host]=$(< "$guests_yml" yq '.managed_node.topology-address')
+        host_params[ansible_ssh_private_key_file]="${tmt_tree_provision}/control_node/id_ecdsa"
+        host_params[ansible_ssh_extra_args]="-o StrictHostKeyChecking=no"
+        rolesBuildInventory "$inventory" "$hostname" host_params
     rlPhaseEnd
 
     rlPhaseStartTest

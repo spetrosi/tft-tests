@@ -6,5 +6,5 @@ tag: test_playbooks
 require:
     - git
     - python
-    - pip
-    - yq
+    #- pip
+    #- yq

@@ -3,15 +3,14 @@ provision:
   - name: control_node
     # TF uses `how: artemis`, tmt try uses `how: virtual`. No need to define `how`
     # `connection: system` is for `how: virtual` to make VMs get a real IP to configure ssh easily
-    # It is ignored on artemis
-    connection: system
+    # connection: system
   - name: managed_node
-    connection: system
-prepare:
-  - name: Add control_node public key to managed_node
-    how: shell
-    script: cat ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub > ~/.ssh/authorized_keys
-    where: managed_node
+    # connection: system
+#prepare:
+#  - name: Add control_node public key to managed_node
+#    how: shell
+#    script: cat ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub > ~/.ssh/authorized_keys
+#    where: managed_node
 discover:
   - name: Run test playbooks from control_node
     how: fmf

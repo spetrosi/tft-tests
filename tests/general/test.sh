@@ -150,18 +150,25 @@ all:
 
 rlJournalStart
     rlPhaseStartSetup
-        rlRun "find / -name 'guests.yml'"
-        rlRun "pwd"
+        tmt_tree_provision=${TMT_TREE%/*}/provision
         rlRun "echo $TMT_TREE"
-        rlRun "ls $TMT_TREE"
-        rlRun "echo $TMT_TOPOLOGY_YAML"
-        rlRun "echo $TMT_TOPOLOGY_BASH"
-        rlRun "awk 'BEGIN{for(v in ENVIRON) print v}'"
+        rlRun "ls $tmt_tree_provision"
+        rlRun "ls ${TMT_TREE%/*}/provision/control_node"
+        rlRun "cat ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub"
+        rlRun "cat $TMT_TOPOLOGY_YAML"
+        rlRun "cat $TMT_TOPOLOGY_BASH"
+        . "$TMT_TOPOLOGY_BASH"
+        rlRun "echo Im running on ${TMT_GUEST[name]}"
+        rlRun "echo ${TMT_GUESTS[managed_node.hostname]}"
+        rlRun "ssh root@${TMT_GUESTS[managed_node.hostname]}"
+        rlRun "exit"
         # Reading topology from guests.yml for compatibility with tmt try
         guests_yml=${tmt_tree_provision}/guests.yaml
-
+        rlRun "cat $guests_yml"
+        rlRun "yq"
         rlRun "set -o pipefail"
         required_vars=("ANSIBLE_VER" "REPO_NAME")
+        rlDie "debug finish"
         for required_var in "${required_vars[@]}"; do
             if [ -z "${!required_var}" ]; then
                 rlDie "This required variable is unset: $required_var "

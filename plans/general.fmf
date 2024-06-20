@@ -1,12 +1,11 @@
 summary: A general test for a system role
 provision:
   - name: control_node
-    # TF uses `how: artemis`, but locally we must use `how: virtual`
-    # how: virtual
-    # This is to ensure that each VM gets a real IP to configure ssh easily
+    # TF uses `how: artemis`, tmt try uses `how: virtual`. No need to define `how`
+    # `connection: system` is for `how: virtual` to make VMs get a real IP to configure ssh easily
+    # It is ignored on artemis
     connection: system
   - name: managed_node
-    # how: virtual
     connection: system
 prepare:
   - name: Add control_node public key to managed_node

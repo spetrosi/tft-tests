@@ -148,6 +148,15 @@ all:
     rlRun "cat $inventory"
 }
 
+rolesRunPlaybook() {
+    local tests_path=$1
+    local test_playbook=$2
+    local inventory=$3
+    LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER".log
+    rlRun "ansible-playbook -i $inventory $tests_path$test_playbook -v &> $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+    rlFileSubmit "$LOGFILE"
+}
+
 rlJournalStart
     rlPhaseStartSetup
         tmt_tree_provision=${TMT_TREE%/*}/provision
@@ -157,18 +166,17 @@ rlJournalStart
         rlRun "cat ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub"
         rlRun "cat $TMT_TOPOLOGY_YAML"
         rlRun "cat $TMT_TOPOLOGY_BASH"
-        . "$TMT_TOPOLOGY_BASH"
+        # . "$TMT_TOPOLOGY_BASH"
         rlRun "echo Im running on ${TMT_GUEST[name]}"
         rlRun "echo ${TMT_GUESTS[managed_node.hostname]}"
-        rlRun "ssh root@${TMT_GUESTS[managed_node.hostname]}"
-        rlRun "exit"
+        # rlRun "ssh root@${TMT_GUESTS[managed_node.hostname]}"
+        # rlRun "exit"
         # Reading topology from guests.yml for compatibility with tmt try
         guests_yml=${tmt_tree_provision}/guests.yaml
-        rlRun "cat $guests_yml"
-        rlRun "yq"
-        rlRun "set -o pipefail"
-        required_vars=("ANSIBLE_VER" "REPO_NAME")
-        rlDie "debug finish"
+        # rlRun "cat $guests_yml"
+        # rlRun "set -o pipefail"
+        # required_vars=("ANSIBLE_VER" "REPO_NAME")
+        # rlDie "debug finish"
         for required_var in "${required_vars[@]}"; do
             if [ -z "${!required_var}" ]; then
                 rlDie "This required variable is unset: $required_var "
@@ -195,8 +203,13 @@ rlJournalStart
         # Reading topology from guests.yml for compatibility with tmt try
         guests_yml=${tmt_tree_provision}/guests.yaml
         declare -A host_params
-        host_params[ansible_port]=$(< "$guests_yml" yq '.managed_node.port' )
-        host_params[ansible_host]=$(< "$guests_yml" yq '.managed_node.topology-address')
+        if head "$guests_yml" | grep -q 'managed_node:'; then
+            host_params[ansible_port]=$(< "$guests_yml" grep -oP -m 1 'port: \K(.*)')
+            host_params[ansible_host]=$(< "$guests_yml" grep -oP -m 1 'topology-address: \K(.*)')
+        else
+            host_params[ansible_port]=$(< "$guests_yml" grep -oP -m 2 'port: \K(.*)' | tail -1)
+            host_params[ansible_host]=$(< "$guests_yml" grep -oP -m 2 'topology-address: \K(.*)' | tail -1)
+        fi
         host_params[ansible_ssh_private_key_file]="${tmt_tree_provision}/control_node/id_ecdsa"
         host_params[ansible_ssh_extra_args]="-o StrictHostKeyChecking=no"
         rolesBuildInventory "$inventory" "$hostname" host_params
@@ -208,10 +221,10 @@ rlJournalStart
         for test_playbook in $test_playbooks; do
             if [ -n "$SYSTEM_ROLES_ONLY_TESTS" ]; then
                 if echo "$SYSTEM_ROLES_ONLY_TESTS" | grep -q "$test_playbook"; then
-                    rlRun "ansible-playbook -i $inventory $tests_path$test_playbook -v"
+                    rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory"
                 fi
             else
-                rlRun "ansible-playbook -i $inventory $tests_path$test_playbook -v"
+                rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory"
             fi
         done
     rlPhaseEnd

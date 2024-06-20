@@ -1,10 +1,8 @@
 summary: Test a system role
 test: ./test.sh
-framework: beakerlib
 duration: 2h
 tag: test_playbooks
 require:
     - git
     - python
-    #- pip
-    #- yq
+    - pip

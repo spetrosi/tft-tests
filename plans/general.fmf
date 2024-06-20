@@ -3,10 +3,17 @@ provision:
   - name: control_node
     # TF uses `how: artemis`, tmt try uses `how: virtual`. No need to define `how`
     # `connection: system` is for `how: virtual` to make VMs get a real IP to configure ssh easily
-    # connection: system
+    # This setting is ignored on artemis so we can keep it
+    connection: system
   - name: managed_node
-    # connection: system
-#prepare:
+    connection: system
+prepare:
+  - name: Enable epel
+    how: feature
+    epel: enabled
+  - name: Install beakerlib
+    how: install
+    package: beakerlib
 #  - name: Add control_node public key to managed_node
 #    how: shell
 #    script: cat ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub > ~/.ssh/authorized_keys

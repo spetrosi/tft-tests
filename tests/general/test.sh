@@ -150,7 +150,16 @@ all:
 
 rlJournalStart
     rlPhaseStartSetup
+        rlRun "find / -name 'guests.yml'"
         rlRun "pwd"
+        rlRun "echo $TMT_TREE"
+        rlRun "ls $TMT_TREE"
+        rlRun "echo $TMT_TOPOLOGY_YAML"
+        rlRun "echo $TMT_TOPOLOGY_BASH"
+        rlRun "awk 'BEGIN{for(v in ENVIRON) print v}'"
+        # Reading topology from guests.yml for compatibility with tmt try
+        guests_yml=${tmt_tree_provision}/guests.yaml
+
         rlRun "set -o pipefail"
         required_vars=("ANSIBLE_VER" "REPO_NAME")
         for required_var in "${required_vars[@]}"; do

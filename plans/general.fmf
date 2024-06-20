@@ -4,10 +4,10 @@ provision:
     # TF uses `how: artemis`, but locally we must use `how: virtual`
     # how: virtual
     # This is to ensure that each VM gets a real IP to configure ssh easily
-    # connection: system
+    connection: system
   - name: managed_node
     # how: virtual
-    # connection: system
+    connection: system
 prepare:
   - name: Add control_node public key to managed_node
     how: shell

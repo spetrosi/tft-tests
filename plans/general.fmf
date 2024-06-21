@@ -14,7 +14,7 @@ prepare:
   - name: Install beakerlib
     how: install
     package: beakerlib
-# When running `how: virtual`, e.g. with `tmt try`, need to share ssh keys. When running via artemis, artemis shares keys.
+  # This task is needed when running `how: virtual`, e.g. with `tmt try`. When running via artemis, artemis shares keys.
   # - name: Add control_node public key to managed_node
   #   how: shell
   #   script: cat ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub > ~/.ssh/authorized_keys

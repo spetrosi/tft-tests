@@ -33,18 +33,16 @@ rolesInstallAnsible() {
 }
 
 rolesClonePR() {
-    local role_path
+    local role_path=$1
     if [ ! -d "$REPO_NAME" ]; then
-        rlRun "git clone https://github.com/linux-system-roles/$REPO_NAME.git"
+        rlRun "git clone https://github.com/linux-system-roles/$REPO_NAME.git $role_path"
     fi
     if [ -n "$PR_NUM" ]; then
-        rlRun "pushd $REPO_NAME || exit"
+        rlRun "pushd $role_path || exit"
         rlRun "git fetch origin pull/$PR_NUM/head:test_pr"
         rlRun "git checkout test_pr"
         rlRun "popd || exit"
     fi
-    role_path="$PWD"/"$REPO_NAME"
-    return "$role_path"
 }
 
 # Handle Ansible Vault encrypted variables
@@ -89,15 +87,16 @@ rolesInstallDependencies() {
 }
 
 rolesEnableCallbackPlugins() {
+    local collection_path=$1
     # Enable callback plugins for prettier ansible output
     callback_path=ansible_collections/ansible/posix/plugins/callback
-    if [ ! -f "$1"/"$callback_path"/debug.py ] || [ ! -f "$1"/"$callback_path"/profile_tasks.py ]; then
-        ansible_posix=$(mktemp -d)
+    if [ ! -f "$collection_path"/"$callback_path"/debug.py ] || [ ! -f "$collection_path"/"$callback_path"/profile_tasks.py ]; then
+        rlRun "ansible_posix=$(TMPDIR=$TMT_TREE mktemp --directory)"
         rlRun "ansible-galaxy collection install ansible.posix -p $ansible_posix -vv"
         if [ ! -d "$1"/"$callback_path"/ ]; then
-            rlRun "mkdir -p $1/$callback_path"
+            rlRun "mkdir -p $collection_path/$callback_path"
         fi
-        rlRun "cp $ansible_posix/$callback_path/{debug.py,profile_tasks.py} $1/$callback_path/"
+        rlRun "cp $ansible_posix/$callback_path/{debug.py,profile_tasks.py} $collection_path/$callback_path/"
         rlRun "rm -rf $ansible_posix"
     fi
     rlRun "ansible-config list | grep 'name: ANSIBLE_CALLBACKS_ENABLED'"
@@ -120,24 +119,29 @@ rolesConvertToCollection() {
     rlRun "curl -L -o $role_path/runtime.yml $collection_script_url/lsr_role2collection/runtime.yml"
     # Remove role that was installed as a dependencie
     rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
-    rlRun "python -m pip install ruamel.yaml"
+    if rlIsFedora || rlIsRHELLike ">7"; then
+        dnf install python3-ruamel-yaml -y
+    # el 7
+    else
+        yum install python2-ruamel-yaml -y
+    fi
     rlRun "python $role_path/lsr_role2collection.py \
-        --src-owner linux-system-roles \
-        --role $REPO_NAME \
-        --src-path $role_path \
-        --dest-path $collection_path \
-        --namespace $coll_namespace \
-        --collection $coll_name \
-        --subrole-prefix $subrole_prefix \
-        --meta-runtime $role_path/runtime.yml"
+--src-owner linux-system-roles \
+--role $REPO_NAME \
+--src-path $role_path \
+--dest-path $collection_path \
+--namespace $coll_namespace \
+--collection $coll_name \
+--subrole-prefix $subrole_prefix \
+--meta-runtime $role_path/runtime.yml"
 }
 
 rolesBuildInventory() {
     local inventory=$1
     local hostname=$2
-    declare -n host_params=$1
+    local -n host_params=$3
     if [ ! -f "$inventory" ]; then
-    echo "---
+        echo "---
 all:
   hosts:" > "$inventory"
     fi
@@ -159,24 +163,7 @@ rolesRunPlaybook() {
 
 rlJournalStart
     rlPhaseStartSetup
-        tmt_tree_provision=${TMT_TREE%/*}/provision
-        rlRun "echo $TMT_TREE"
-        rlRun "ls $tmt_tree_provision"
-        rlRun "ls ${TMT_TREE%/*}/provision/control_node"
-        rlRun "cat ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub"
-        rlRun "cat $TMT_TOPOLOGY_YAML"
-        rlRun "cat $TMT_TOPOLOGY_BASH"
-        # . "$TMT_TOPOLOGY_BASH"
-        rlRun "echo Im running on ${TMT_GUEST[name]}"
-        rlRun "echo ${TMT_GUESTS[managed_node.hostname]}"
-        # rlRun "ssh root@${TMT_GUESTS[managed_node.hostname]}"
-        # rlRun "exit"
-        # Reading topology from guests.yml for compatibility with tmt try
-        guests_yml=${tmt_tree_provision}/guests.yaml
-        # rlRun "cat $guests_yml"
-        # rlRun "set -o pipefail"
-        # required_vars=("ANSIBLE_VER" "REPO_NAME")
-        # rlDie "debug finish"
+        required_vars=("ANSIBLE_VER" "REPO_NAME")
         for required_var in "${required_vars[@]}"; do
             if [ -z "${!required_var}" ]; then
                 rlDie "This required variable is unset: $required_var "
@@ -187,12 +174,12 @@ rlJournalStart
         else
             rlLogInfo "ANSIBLE_VER not defined - using system ansible if installed"
         fi
-        rolesClonePR
-        role_path="$PWD"/"$REPO_NAME"
+        role_path=$TMT_TREE/$REPO_NAME
+        rolesClonePR "$role_path"
         for test_playbook in "$role_path"/tests/tests_*.yml; do
             rolesHandleVault "$role_path" "$test_playbook"
         done
-        collection_path=$(mktemp -d)
+        rlRun "collection_path=$(TMPDIR=$TMT_TREE mktemp --directory)"
         rolesInstallDependencies "$role_path" "$collection_path"
         rolesEnableCallbackPlugins "$collection_path"
         rolesConvertToCollection "$role_path" "$collection_path"

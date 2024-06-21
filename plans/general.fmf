@@ -14,10 +14,11 @@ prepare:
   - name: Install beakerlib
     how: install
     package: beakerlib
-#  - name: Add control_node public key to managed_node
-#    how: shell
-#    script: cat ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub > ~/.ssh/authorized_keys
-#    where: managed_node
+# When running `how: virtual`, e.g. with `tmt try`, need to share ssh keys. When running via artemis, artemis shares keys.
+  # - name: Add control_node public key to managed_node
+  #   how: shell
+  #   script: cat ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub > ~/.ssh/authorized_keys
+  #   where: managed_node
 discover:
   - name: Run test playbooks from control_node
     how: fmf
@@ -27,6 +28,6 @@ execute:
     how: tmt
 environment:
     ANSIBLE_VER: 2.16
-    REPO_NAME: logging
-    # PR_NUM: 154
-    SYSTEM_ROLES_ONLY_TESTS: tests_imuxsock_files.yml tests_relp.yml
+    REPO_NAME: network
+    SYSTEM_ROLES_ONLY_TESTS: tests_default.yml
+    # PR_NUM: 14

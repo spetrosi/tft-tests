@@ -175,7 +175,7 @@ rolesRunPlaybook() {
     local test_playbook=$2
     local inventory=$3
     LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER".log
-    rlRun "ansible-playbook -i $inventory $tests_path$test_playbook -v &> $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+    rlRun "ansible-playbook -i $inventory $tests_path$test_playbook -v &> | tee $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
     rlFileSubmit "$LOGFILE"
 }
 

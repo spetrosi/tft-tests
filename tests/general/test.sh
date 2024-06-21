@@ -59,8 +59,7 @@ rolesGetTests() {
     else
         test_playbooks="$test_playbooks_all"
     fi
-    rlRun "echo $test_playbooks"
-    return "$test_playbooks"
+    echo "$test_playbooks"
 }
 
 # Handle Ansible Vault encrypted variables
@@ -175,7 +174,8 @@ rolesRunPlaybook() {
     local test_playbook=$2
     local inventory=$3
     LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER".log
-    rlRun "ansible-playbook -i $inventory $tests_path$test_playbook -v &> | tee $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+    # rlRun "ansible-playbook -i $inventory $tests_path$test_playbook -v &> $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+    rlRun "ansible-playbook -i $inventory $tests_path$test_playbook -v" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
     rlFileSubmit "$LOGFILE"
 }
 
@@ -194,7 +194,8 @@ rlJournalStart
         fi
         role_path=$TMT_TREE/$REPO_NAME
         rolesCloneRepo "$role_path"
-        rolesGetTests "$role_path"
+        test_playbooks=$(rolesGetTests "$role_path")
+        rlLogInfo "Test playbooks: $test_playbooks"
         for test_playbook in $test_playbooks; do
             rolesHandleVault "$role_path" "$test_playbook"
         done
@@ -222,6 +223,7 @@ rlJournalStart
     rlPhaseEnd
 
     rlPhaseStartTest
+        tests_path="$collection_path"/ansible_collections/fedora/linux_system_roles/tests/"$REPO_NAME"/
         for test_playbook in $test_playbooks; do
             rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory"
         done

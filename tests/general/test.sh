@@ -32,7 +32,7 @@ rolesInstallAnsible() {
     rlAssertRpm "$ansible_pkg"
 }
 
-rolesClonePR() {
+rolesCloneRepo() {
     local role_path=$1
     if [ ! -d "$REPO_NAME" ]; then
         rlRun "git clone https://github.com/linux-system-roles/$REPO_NAME.git $role_path"
@@ -43,6 +43,24 @@ rolesClonePR() {
         rlRun "git checkout test_pr"
         rlRun "popd || exit"
     fi
+}
+
+rolesGetTests() {
+    local role_path=$1
+    local test_playbooks_all test_playbooks
+    tests_path="$role_path"/tests/
+    test_playbooks_all=$(find "$tests_path" -maxdepth 1 -type f -name "tests_*.yml" -printf '%f\n')
+    if [ -n "$SYSTEM_ROLES_ONLY_TESTS" ]; then
+        for test_playbook in $test_playbooks_all; do
+            if echo "$SYSTEM_ROLES_ONLY_TESTS" | grep -q "$test_playbook"; then
+                test_playbooks="$test_playbooks $test_playbook"
+            fi
+        done
+    else
+        test_playbooks="$test_playbooks_all"
+    fi
+    rlRun "echo $test_playbooks"
+    return "$test_playbooks"
 }
 
 # Handle Ansible Vault encrypted variables
@@ -175,8 +193,9 @@ rlJournalStart
             rlLogInfo "ANSIBLE_VER not defined - using system ansible if installed"
         fi
         role_path=$TMT_TREE/$REPO_NAME
-        rolesClonePR "$role_path"
-        for test_playbook in "$role_path"/tests/tests_*.yml; do
+        rolesCloneRepo "$role_path"
+        rolesGetTests "$role_path"
+        for test_playbook in $test_playbooks; do
             rolesHandleVault "$role_path" "$test_playbook"
         done
         rlRun "collection_path=$(TMPDIR=$TMT_TREE mktemp --directory)"
@@ -203,16 +222,8 @@ rlJournalStart
     rlPhaseEnd
 
     rlPhaseStartTest
-        tests_path="$collection_path"/ansible_collections/fedora/linux_system_roles/tests/"$REPO_NAME"/
-        test_playbooks=$(find "$tests_path" -maxdepth 1 -type f -name "tests_*.yml" -printf '%f\n')
         for test_playbook in $test_playbooks; do
-            if [ -n "$SYSTEM_ROLES_ONLY_TESTS" ]; then
-                if echo "$SYSTEM_ROLES_ONLY_TESTS" | grep -q "$test_playbook"; then
-                    rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory"
-                fi
-            else
-                rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory"
-            fi
+            rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory"
         done
     rlPhaseEnd
 

@@ -1,11 +1,13 @@
 summary: A general test for a system role
 provision:
   - name: control_node
+    role: control_node
     # TF uses `how: artemis`, tmt try uses `how: virtual`. No need to define `how`
     # `connection: system` is for `how: virtual` to make VMs get a real IP to configure ssh easily
     # This setting is ignored on artemis so we can keep it
     connection: system
   - name: managed_node
+    role: managed_node
     connection: system
 prepare:
   - name: Enable epel
@@ -14,11 +16,6 @@ prepare:
   - name: Install beakerlib
     how: install
     package: beakerlib
-  # This task is needed when running `how: virtual`, e.g. with `tmt try`. When running via artemis, artemis shares keys.
-  # - name: Add control_node public key to managed_node
-  #   how: shell
-  #   script: cat ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub > ~/.ssh/authorized_keys
-  #   where: managed_node
 discover:
   - name: Run test playbooks from control_node
     how: fmf

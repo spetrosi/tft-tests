@@ -169,6 +169,30 @@ all:
     rlRun "cat $inventory"
 }
 
+rolesIsVirtual() {
+    local tmt_tree_provision=$1
+    grep -q 'how: virtual' "$tmt_tree_provision"/step.yaml
+    echo $?
+}
+
+rolesIsManaged() {
+    local tmt_tree_provision=$1
+    local ip_addr
+    ip_addr=$(hostname -I)
+    grep 'role: managed_node' -C 5 "$tmt_tree_provision"/guests.yaml | grep -oP "primary-address: \K(.*)" | grep -q "$ip_addr"
+    echo $?
+}
+
+rolesDistributeSSH() {
+    local tmt_tree_provision=$1
+    # This task is needed when running `how: virtual`, e.g. with `tmt try`. When running via artemis, artemis shares keys itself
+    is_virtual=$(rolesIsVirtual "$tmt_tree_provision")
+    is_managed_node=$(rolesIsManaged "$tmt_tree_provision")
+    if [ "$is_virtual" -eq 0 ] && [ "$is_managed_node" -eq 0 ]; then
+        rlRun "cat ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub >> ~/.ssh/authorized_keys" 0 "Add control_node public key to managed_node"
+    fi
+}
+
 rolesRunPlaybook() {
     local tests_path=$1
     local test_playbook=$2
@@ -206,8 +230,10 @@ rlJournalStart
         inventory="$role_path/inventory.yml"
         hostname=managed_node
         tmt_tree_provision=${TMT_TREE%/*}/provision
+        rolesDistributeSSH "$tmt_tree_provision"
         # TMT_TOPOLOGY_ variables are not available in tmt try.
         # Reading topology from guests.yml for compatibility with tmt try
+        is_virtual=$(rolesIsVirtual "$tmt_tree_provision")
         guests_yml=${tmt_tree_provision}/guests.yaml
         declare -A host_params
         if head "$guests_yml" | grep -q 'managed_node:'; then
@@ -217,7 +243,9 @@ rlJournalStart
             host_params[ansible_port]=$(< "$guests_yml" grep -oP -m 2 'port: \K(.*)' | tail -1)
             host_params[ansible_host]=$(< "$guests_yml" grep -oP -m 2 'topology-address: \K(.*)' | tail -1)
         fi
-        host_params[ansible_ssh_private_key_file]="${tmt_tree_provision}/control_node/id_ecdsa"
+        if [ "$is_virtual" -eq 0 ]; then
+            host_params[ansible_ssh_private_key_file]="${tmt_tree_provision}/control_node/id_ecdsa"
+        fi
         host_params[ansible_ssh_extra_args]="-o StrictHostKeyChecking=no"
         rolesBuildInventory "$inventory" "$hostname" host_params
     rlPhaseEnd

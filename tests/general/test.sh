@@ -140,6 +140,13 @@ rolesConvertToCollection() {
     else
         yum install python2-ruamel-yaml -y
     fi
+    # Removing symlinks in tests/roles
+    if [ -d "$role_path"/tests/roles ]; then
+        find "$role_path"/tests/roles -type l -exec rm {} \;
+        if [ -d "$role_path"/tests/roles/linux-system-roles."$REPO_NAME" ]; then
+            rlRun "rm -r $role_path/tests/roles/linux-system-roles.$REPO_NAME"
+        fi
+    fi
     rlRun "python $role_path/lsr_role2collection.py \
 --src-owner linux-system-roles \
 --role $REPO_NAME \

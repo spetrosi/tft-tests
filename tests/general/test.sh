@@ -114,7 +114,6 @@ rolesEnableCallbackPlugins() {
         rlRun "cp $ansible_posix/$callback_path/{debug.py,profile_tasks.py} $collection_path/$callback_path/"
         rlRun "rm -rf $ansible_posix"
     fi
-    rlRun "ansible-config list | grep 'name: ANSIBLE_CALLBACKS_ENABLED'"
     if ansible-config list | grep -q "name: ANSIBLE_CALLBACKS_ENABLED"; then
         rlRun "export ANSIBLE_CALLBACKS_ENABLED=profile_tasks"
     else
@@ -136,9 +135,10 @@ rolesConvertToCollection() {
     rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
     if rlIsFedora || rlIsRHELLike ">7"; then
         dnf install python3-ruamel-yaml -y
-    # el 7
+    # el 7: python36-ruamel-yaml RPM ships ancient ruamel-yaml version that doesn't have YAML class
     else
-        yum install python2-ruamel-yaml -y
+        rlRun "yum install python3-pip -y"
+        rlRun "python3 -m pip install ruamel-yaml"
     fi
     # Removing symlinks in tests/roles
     if [ -d "$role_path"/tests/roles ]; then
@@ -147,7 +147,7 @@ rolesConvertToCollection() {
             rlRun "rm -r $role_path/tests/roles/linux-system-roles.$REPO_NAME"
         fi
     fi
-    rlRun "python $role_path/lsr_role2collection.py \
+    rlRun "python3 $role_path/lsr_role2collection.py \
 --src-owner linux-system-roles \
 --role $REPO_NAME \
 --src-path $role_path \
@@ -161,7 +161,7 @@ rolesConvertToCollection() {
 rolesBuildInventory() {
     local inventory=$1
     local hostname=$2
-    local -n host_params=$3
+    declare -n host_params=$3
     if [ ! -f "$inventory" ]; then
         echo "---
 all:

@@ -4,4 +4,4 @@ duration: 2h
 tag: test_playbooks
 require:
     - git
-    - python
+    - python3

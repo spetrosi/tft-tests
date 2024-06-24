@@ -17,17 +17,15 @@ rolesInstallAnsible() {
     local ansible_pkg
     local pkg_cmd
     if rlIsFedora || (rlIsRHELLike ">=8.6" && [ "$ANSIBLE_VER" != "2.9" ]); then
-        pkg_cmd="dnf"
-        ansible_pkg="ansible-core-$ANSIBLE_VER"
+        rlRun "dnf install python3.12-pip -y"
+        rlRun "python3.12 -m pip install ansible-core==$ANSIBLE_VER"
     elif rlIsRHELLike 8; then
-        pkg_cmd="dnf"
-        ansible_pkg="ansible-$ANSIBLE_VER"
+        rlRun "dnf install python3.12-pip -y"
+        rlRun "python3.12 -m pip install ansible==$ANSIBLE_VER"
     else
         # el7
-        pkg_cmd="yum"
-        ansible_pkg="ansible-$ANSIBLE_VER"
+        rlRun "yum install ansible-$ANSIBLE_VER -y"
     fi
-    rlRun "$pkg_cmd install $ansible_pkg* -y"
 }
 
 rolesCloneRepo() {

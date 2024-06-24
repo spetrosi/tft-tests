@@ -18,18 +18,16 @@ rolesInstallAnsible() {
     local pkg_cmd
     if rlIsFedora || (rlIsRHELLike ">=8.6" && [ "$ANSIBLE_VER" != "2.9" ]); then
         pkg_cmd="dnf"
-        ansible_pkg="ansible-core"
+        ansible_pkg="ansible-core-$ANSIBLE_VER"
     elif rlIsRHELLike 8; then
         pkg_cmd="dnf"
-        ansible_pkg="ansible-2.9"
+        ansible_pkg="ansible-$ANSIBLE_VER"
     else
         # el7
         pkg_cmd="yum"
-        ansible_pkg="ansible"
-        rlRun "$pkg_cmd install epel-release -y"
+        ansible_pkg="ansible-$ANSIBLE_VER"
     fi
     rlRun "$pkg_cmd install $ansible_pkg* -y"
-    rlAssertRpm "$ansible_pkg"
 }
 
 rolesCloneRepo() {

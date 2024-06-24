@@ -28,7 +28,7 @@ rolesInstallAnsible() {
         ansible_pkg="ansible"
         rlRun "$pkg_cmd install epel-release -y"
     fi
-    rlRun "$pkg_cmd install $ansible_pkg -y"
+    rlRun "$pkg_cmd install $ansible_pkg* -y"
     rlAssertRpm "$ansible_pkg"
 }
 

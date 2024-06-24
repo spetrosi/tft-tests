@@ -16,6 +16,12 @@ prepare:
   - name: Install beakerlib
     how: install
     package: beakerlib
+  - name: Distribute SSH keys when provisioned with how=virtual
+    script: |
+      if [ -f ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub ]; then
+        cat ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub >> ~/.ssh/authorized_keys
+      fi
+    where: managed_node
 discover:
   - name: Run test playbooks from control_node
     how: fmf

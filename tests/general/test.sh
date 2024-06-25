@@ -72,6 +72,9 @@ rolesGetTests() {
         done
         test_playbooks=$test_playbooks_excludes
     fi
+    if [ -z "$test_playbooks" ]; then
+        rlDie "No test playbooks found"
+    fi
     echo "$test_playbooks"
 }
 

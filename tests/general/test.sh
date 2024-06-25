@@ -158,8 +158,13 @@ rolesConvertToCollection() {
         rlRun "yum install python3-pip -y"
         rlRun "python3 -m pip install ruamel-yaml"
     fi
-    # Remove symlinks
-    rlRun "find $role_path -type l -exec rm {} \;"
+    # Remove symlinks in tests/roles
+    if [ -d "$role_path"/tests/roles ]; then
+        find "$role_path"/tests/roles -type l -exec rm {} \;
+        if [ -d "$role_path"/tests/roles/linux-system-roles."$REPO_NAME" ]; then
+            rlRun "rm -r $role_path/tests/roles/linux-system-roles.$REPO_NAME"
+        fi
+    fi
     rlRun "python3 $TMT_TREE/lsr_role2collection.py \
 --meta-runtime $TMT_TREE/runtime.yml \
 --src-owner linux-system-roles \

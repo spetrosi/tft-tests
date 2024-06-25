@@ -168,6 +168,39 @@ rolesConvertToCollection() {
 --subrole-prefix $subrole_prefix"
 }
 
+rolesPrepareInventoryVars() {
+    local role_path=$1
+    local inventory hostname tmt_tree_provision is_virtual guests_yml host_params
+    inventory="$role_path/inventory.yml"
+    hostname=managed_node
+    # TMT_TOPOLOGY_ variables are not available in tmt try.
+    # Reading topology from guests.yml for compatibility with tmt try
+    tmt_tree_provision=${TMT_TREE%/*}/provision
+    guests_yml=${tmt_tree_provision}/guests.yaml
+    is_virtual=$(rolesIsVirtual "$tmt_tree_provision")
+    declare -A host_params
+    if head "$guests_yml" | grep -q 'managed_node:'; then
+        host_params[ansible_host]=$(< "$guests_yml" grep -oP -m 1 'topology-address: \K(.*)')
+    else
+        host_params[ansible_host]=$(< "$guests_yml" grep -oP -m 2 'topology-address: \K(.*)' | tail -1)
+    fi
+    if [ "$is_virtual" -eq 0 ]; then
+        host_params[ansible_ssh_private_key_file]="${tmt_tree_provision}/control_node/id_ecdsa"
+    fi
+    host_params[ansible_ssh_extra_args]="-o StrictHostKeyChecking=no"
+    if [ ! -f "$inventory" ]; then
+        echo "---
+all:
+  hosts:" > "$inventory"
+    fi
+    echo "    $hostname:" >> "$inventory"
+    for key in "${!host_params[@]}"; do
+        echo "      ${key}: ${host_params[${key}]}" >> "$inventory"
+    done
+    rlRun "echo $inventory"
+}
+
+# This function can be used to build inventory for multihost scenarios
 rolesBuildInventory() {
     local inventory=$1
     local hostname=$2
@@ -224,26 +257,8 @@ rlJournalStart
         rolesInstallDependencies "$role_path" "$collection_path"
         rolesEnableCallbackPlugins "$collection_path"
         rolesConvertToCollection "$role_path" "$collection_path"
-        inventory="$role_path/inventory.yml"
-        hostname=managed_node
-        tmt_tree_provision=${TMT_TREE%/*}/provision
-        # TMT_TOPOLOGY_ variables are not available in tmt try.
-        # Reading topology from guests.yml for compatibility with tmt try
-        is_virtual=$(rolesIsVirtual "$tmt_tree_provision")
-        guests_yml=${tmt_tree_provision}/guests.yaml
-        declare -A host_params
-        if head "$guests_yml" | grep -q 'managed_node:'; then
-            host_params[ansible_port]=$(< "$guests_yml" grep -oP -m 1 'port: \K(.*)')
-            host_params[ansible_host]=$(< "$guests_yml" grep -oP -m 1 'topology-address: \K(.*)')
-        else
-            host_params[ansible_port]=$(< "$guests_yml" grep -oP -m 2 'port: \K(.*)' | tail -1)
-            host_params[ansible_host]=$(< "$guests_yml" grep -oP -m 2 'topology-address: \K(.*)' | tail -1)
-        fi
-        if [ "$is_virtual" -eq 0 ]; then
-            host_params[ansible_ssh_private_key_file]="${tmt_tree_provision}/control_node/id_ecdsa"
-        fi
-        host_params[ansible_ssh_extra_args]="-o StrictHostKeyChecking=no"
-        rolesBuildInventory "$inventory" "$hostname" host_params
+        inventory=$(rolesPrepareInventoryVars "$role_path")
+        rlRun "cat $inventory"
     rlPhaseEnd
 
     rlPhaseStartTest

@@ -12,16 +12,17 @@
 # SYSTEM_ROLES_ONLY_TESTS
 #  Optional: Space separated names of test playbooks to test. E.g. "tests_imuxsock_files.yml tests_relp.yml"
 #  If empty, tests all tests in tests/tests_*.yml
+# PYTHON_VERSION
+# Python version to install ansible-core with.
+PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 
 rolesInstallAnsible() {
-    local ansible_pkg
-    local pkg_cmd
     if rlIsFedora || (rlIsRHELLike ">=8.6" && [ "$ANSIBLE_VER" != "2.9" ]); then
-        rlRun "dnf install python3.12-pip -y"
-        rlRun "python3.12 -m pip install ansible-core==$ANSIBLE_VER"
+        rlRun "dnf install python$PYTHON_VERSION-pip -y"
+        rlRun "python$PYTHON_VERSION -m pip install ansible-core==$ANSIBLE_VER.*"
     elif rlIsRHELLike 8; then
-        rlRun "dnf install python3.12-pip -y"
-        rlRun "python3.12 -m pip install ansible==$ANSIBLE_VER"
+        rlRun "dnf install python$PYTHON_VERSION-pip -y"
+        rlRun "python$PYTHON_VERSION -m pip install ansible==$ANSIBLE_VER.*"
     else
         # el7
         rlRun "yum install ansible-$ANSIBLE_VER -y"
@@ -104,7 +105,7 @@ rolesEnableCallbackPlugins() {
     # Enable callback plugins for prettier ansible output
     callback_path=ansible_collections/ansible/posix/plugins/callback
     if [ ! -f "$collection_path"/"$callback_path"/debug.py ] || [ ! -f "$collection_path"/"$callback_path"/profile_tasks.py ]; then
-        rlRun "ansible_posix=$(TMPDIR=$TMT_TREE mktemp --directory)"
+        ansible_posix=$(TMPDIR=$TMT_TREE mktemp --directory)
         rlRun "ansible-galaxy collection install ansible.posix -p $ansible_posix -vv"
         if [ ! -d "$1"/"$callback_path"/ ]; then
             rlRun "mkdir -p $collection_path/$callback_path"

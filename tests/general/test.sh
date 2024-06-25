@@ -128,8 +128,8 @@ rolesConvertToCollection() {
     local coll_namespace=fedora
     local coll_name=linux_system_roles
     local subrole_prefix=private_"$REPO_NAME"_subrole_
-    rlRun "curl -L -o $role_path/lsr_role2collection.py $collection_script_url/lsr_role2collection.py"
-    rlRun "curl -L -o $role_path/runtime.yml $collection_script_url/lsr_role2collection/runtime.yml"
+    rlRun "curl -L -o $TMT_TREE/lsr_role2collection.py $collection_script_url/lsr_role2collection.py"
+    rlRun "curl -L -o $TMT_TREE/runtime.yml $collection_script_url/lsr_role2collection/runtime.yml"
     # Remove role that was installed as a dependencie
     rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
     if rlIsFedora || rlIsRHELLike ">7"; then
@@ -146,15 +146,15 @@ rolesConvertToCollection() {
             rlRun "rm -r $role_path/tests/roles/linux-system-roles.$REPO_NAME"
         fi
     fi
-    rlRun "python3 $role_path/lsr_role2collection.py \
+    rlRun "python3 $TMT_TREE/lsr_role2collection.py \
+--meta-runtime $TMT_TREE/runtime.yml \
 --src-owner linux-system-roles \
 --role $REPO_NAME \
 --src-path $role_path \
 --dest-path $collection_path \
 --namespace $coll_namespace \
 --collection $coll_name \
---subrole-prefix $subrole_prefix \
---meta-runtime $role_path/runtime.yml"
+--subrole-prefix $subrole_prefix"
 }
 
 rolesBuildInventory() {

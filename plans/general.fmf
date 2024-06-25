@@ -30,7 +30,8 @@ discover:
 execute:
     how: tmt
 environment:
-    ANSIBLE_VER: 2.14
+    ANSIBLE_VER: 2.17
     REPO_NAME: network
-    SYSTEM_ROLES_ONLY_TESTS: tests_default.yml
+    # SYSTEM_ROLES_ONLY_TESTS: tests_default.yml
+    # SYSTEM_ROLES_EXCLUDE_TESTS: ""
     # PR_NUM: 14

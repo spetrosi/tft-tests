@@ -32,7 +32,7 @@ rolesInstallAnsible() {
         rlRun "python$PYTHON_VERSION -m pip install ansible==$ANSIBLE_VER.*"
     else
         # el7
-        rlRun "yum install ansible-$ANSIBLE_VER -y"
+        rlRun "yum install ansible-$ANSIBLE_VER.* -y"
     fi
 }
 

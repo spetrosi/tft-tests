@@ -2,16 +2,23 @@
 
 . /usr/share/beakerlib/beakerlib.sh || exit 1
 
-# test parameters:
+# Test parameters:
 # ANSIBLE_VER
 #   ansible version to use for tests. E.g. "2.9" or "2.16".
+#
 # REPO_NAME
 #   Name of the role repository to test.
+#
 # PR_NUM
 #   Optional: Number of PR to test. If empty, tests the default branch.
+#
 # SYSTEM_ROLES_ONLY_TESTS
 #  Optional: Space separated names of test playbooks to test. E.g. "tests_imuxsock_files.yml tests_relp.yml"
 #  If empty, tests all tests in tests/tests_*.yml
+#
+# SYSTEM_ROLES_EXCLUDE_TESTS
+#   Optiona: Space separated names of test playbooks to exclude from test.
+#
 # PYTHON_VERSION
 # Python version to install ansible-core with.
 PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
@@ -55,6 +62,15 @@ rolesGetTests() {
         done
     else
         test_playbooks="$test_playbooks_all"
+    fi
+    if [ -n "$SYSTEM_ROLES_EXCLUDE_TESTS" ]; then
+        test_playbooks_excludes=""
+        for test_playbook in $test_playbooks; do
+            if ! echo "$SYSTEM_ROLES_EXCLUDE_TESTS" | grep -q "$test_playbook"; then
+                test_playbooks_excludes="$test_playbooks_excludes $test_playbook"
+            fi
+        done
+        test_playbooks=$test_playbooks_excludes
     fi
     echo "$test_playbooks"
 }

@@ -10,6 +10,11 @@ provision:
     role: managed_node
     connection: system
 prepare:
+  - name: Use vault.centos.org repos (CS8 EOL workaround)
+    script: |
+      if grep -q 'CentOS Stream release 8' /etc/redhat-release; then
+        sed -i '/^mirror/d;s/#\(baseurl=http:\/\/\)mirror/\1vault/' /etc/yum.repos.d/*.repo
+      fi
   - name: Enable epel
     how: feature
     epel: enabled

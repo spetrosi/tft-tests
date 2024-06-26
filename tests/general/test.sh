@@ -20,16 +20,16 @@
 #   Optiona: Space separated names of test playbooks to exclude from test.
 #
 # PYTHON_VERSION
-# Python version to install ansible-core with.
+# Python version to install ansible-core with (EL 8, 9, 10 only).
 PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 
 rolesInstallAnsible() {
-    if rlIsFedora || (rlIsRHELLike ">=8.6" && [ "$ANSIBLE_VER" != "2.9" ]); then
+    if rlIsFedora || (rlIsRHELLike ">7" && [ "$ANSIBLE_VER" != "2.9" ]); then
         rlRun "dnf install python$PYTHON_VERSION-pip -y"
-        rlRun "python$PYTHON_VERSION -m pip install ansible-core==$ANSIBLE_VER.*"
+        rlRun "python3 -m pip install ansible-core==$ANSIBLE_VER.*"
     elif rlIsRHELLike 8; then
         rlRun "dnf install python$PYTHON_VERSION-pip -y"
-        rlRun "python$PYTHON_VERSION -m pip install ansible==$ANSIBLE_VER.*"
+        rlRun "python3 -m pip install ansible==$ANSIBLE_VER.*"
     else
         # el7
         rlRun "yum install ansible-$ANSIBLE_VER.* -y"
@@ -152,7 +152,7 @@ rolesConvertToCollection() {
     # Remove role that was installed as a dependencie
     rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
     if rlIsFedora || rlIsRHELLike ">7"; then
-        dnf install python3-ruamel-yaml -y
+        rlRun "python3 -m pip install ruamel-yaml"
     # el 7: python36-ruamel-yaml RPM ships ancient ruamel-yaml version that doesn't have YAML class
     else
         rlRun "yum install python3-pip -y"

@@ -237,7 +237,7 @@ rolesRunPlaybook() {
     local test_playbook=$2
     local inventory=$3
     LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"
-    rlRun "ANSIBLE_LOG_PATH=$LOGFILE ansible-playbook -i $inventory $tests_path$test_playbook -v" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+    rlRun "ansible-playbook -i $inventory $tests_path$test_playbook -v &> $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
     failed=$(grep 'PLAY RECAP' -A 1 "$LOGFILE" | tail -n 1 | grep -Po 'failed=\K(\d+)')
     rescued=$(grep 'PLAY RECAP' -A 1 "$LOGFILE" | tail -n 1 | grep -Po 'rescued=\K(\d+)')
     if [ "$failed" -gt "$rescued" ]; then

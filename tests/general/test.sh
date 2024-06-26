@@ -42,10 +42,8 @@ rolesCloneRepo() {
         rlRun "git clone https://github.com/linux-system-roles/$REPO_NAME.git $role_path"
     fi
     if [ -n "$PR_NUM" ]; then
-        rlRun "pushd $role_path || exit"
-        rlRun "git fetch origin pull/$PR_NUM/head:test_pr"
-        rlRun "git checkout test_pr"
-        rlRun "popd || exit"
+        rlRun "git -C $role_path fetch origin pull/$PR_NUM/head:test_pr"
+        rlRun "git -C $role_path checkout test_pr"
     fi
 }
 

@@ -26,10 +26,11 @@ PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 rolesInstallAnsible() {
     if rlIsFedora || (rlIsRHELLike ">7" && [ "$ANSIBLE_VER" != "2.9" ]); then
         rlRun "dnf install python$PYTHON_VERSION-pip -y"
-        rlRun "python3 -m pip install ansible-core==$ANSIBLE_VER.*"
+        rlRun "python$PYTHON_VERSION -m pip install ansible-core==$ANSIBLE_VER.*"
     elif rlIsRHELLike 8; then
-        rlRun "dnf install python$PYTHON_VERSION-pip -y"
-        rlRun "python3 -m pip install ansible==$ANSIBLE_VER.*"
+        PYTHON_VERSION=3.9
+        rlRun "dnf install python$PYTHON_VERSION -y"
+        rlRun "python$PYTHON_VERSION -m pip install ansible==$ANSIBLE_VER.*"
     else
         # el7
         rlRun "yum install ansible-$ANSIBLE_VER.* -y"
@@ -150,11 +151,12 @@ rolesConvertToCollection() {
     # Remove role that was installed as a dependencie
     rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
     if rlIsFedora || rlIsRHELLike ">7"; then
-        rlRun "python3 -m pip install ruamel-yaml"
-    # el 7: python36-ruamel-yaml RPM ships ancient ruamel-yaml version that doesn't have YAML class
+        rlRun "python$PYTHON_VERSION -m pip install ruamel-yaml"
+    # el7
     else
-        rlRun "yum install python3-pip -y"
-        rlRun "python3 -m pip install ruamel-yaml"
+        PYTHON_VERSION=3
+        rlRun "yum install python$PYTHON_VERSION-pip -y"
+        rlRun "python$PYTHON_VERSION -m pip install ruamel-yaml"
     fi
     # Remove symlinks in tests/roles
     if [ -d "$role_path"/tests/roles ]; then
@@ -163,7 +165,7 @@ rolesConvertToCollection() {
             rlRun "rm -r $role_path/tests/roles/linux-system-roles.$REPO_NAME"
         fi
     fi
-    rlRun "python3 $TMT_TREE/lsr_role2collection.py \
+    rlRun "python$PYTHON_VERSION $TMT_TREE/lsr_role2collection.py \
 --meta-runtime $TMT_TREE/runtime.yml \
 --src-owner linux-system-roles \
 --role $REPO_NAME \

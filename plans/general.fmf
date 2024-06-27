@@ -9,18 +9,33 @@ provision:
   - name: managed_node
     role: managed_node
     connection: system
+environment:
+    ANSIBLE_VER: 2.17
+    REPO_NAME: network
+    SYSTEM_ROLES_ONLY_TESTS: 	tests_infiniband_nm.yml
+    PYTHON_VERSION: 3.12
+    # SYSTEM_ROLES_EXCLUDE_TESTS: ""
+    # PR_NUM: 14
 prepare:
   - name: Use vault.centos.org repos (CS8 EOL workaround)
     script: |
       if grep -q 'CentOS Stream release 8' /etc/redhat-release; then
         sed -i '/^mirror/d;s/#\(baseurl=http:\/\/\)mirror/\1vault/' /etc/yum.repos.d/*.repo
       fi
-  - name: Enable epel
+  - name: Enable epel on control node to install beakerlib
     how: feature
     epel: enabled
-  - name: Install beakerlib
+    where: control_node
+  - name: Install beakerlib on control node for tests
     how: install
     package: beakerlib
+    where: control_node
+  - name: Install python on managed node when running CS8 with ansible!=2.9
+    script: |
+      if [ "$ANSIBLE_VER" != "2.9" ] && grep -q 'CentOS Stream release 8' /etc/redhat-release; then
+        dnf install -y python"$PYTHON_VERSION"
+      fi
+    where: managed_node
   - name: Distribute SSH keys when provisioned with how=virtual
     script: |
       if [ -f ${TMT_TREE%/*}/provision/control_node/id_ecdsa.pub ]; then
@@ -34,9 +49,3 @@ discover:
     where: control_node
 execute:
     how: tmt
-environment:
-    ANSIBLE_VER: 2.17
-    REPO_NAME: network
-    # SYSTEM_ROLES_ONLY_TESTS: tests_default.yml
-    # SYSTEM_ROLES_EXCLUDE_TESTS: ""
-    # PR_NUM: 14

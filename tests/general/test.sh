@@ -23,6 +23,7 @@
 # Python version to install ansible-core with (EL 8, 9, 10 only).
 PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 
+SKIP_TAGS="--skip-tags tests::nvme,tests::infiniband"
 rolesInstallAnsible() {
     if rlIsFedora || (rlIsRHELLike ">7" && [ "$ANSIBLE_VER" != "2.9" ]); then
         rlRun "dnf install python$PYTHON_VERSION-pip -y"
@@ -237,7 +238,7 @@ rolesRunPlaybook() {
     local test_playbook=$2
     local inventory=$3
     LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"
-    rlRun "ansible-playbook -i $inventory $tests_path$test_playbook -v &> $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+    rlRun "ansible-playbook -i $inventory $SKIP_TAGS $tests_path$test_playbook -v &> $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
     failed=$(grep 'PLAY RECAP' -A 1 "$LOGFILE" | tail -n 1 | grep -Po 'failed=\K(\d+)')
     rescued=$(grep 'PLAY RECAP' -A 1 "$LOGFILE" | tail -n 1 | grep -Po 'rescued=\K(\d+)')
     if [ "$failed" -gt "$rescued" ]; then

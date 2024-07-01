@@ -13,8 +13,8 @@ environment:
     ANSIBLE_VER: 2.17
     REPO_NAME: network
     PYTHON_VERSION: 3.12
-    # SYSTEM_ROLES_EXCLUDE_TESTS: ""
-    # PR_NUM: 14
+    SYSTEM_ROLES_ONLY_TESTS: tests_default.yml
+    PR_NUM: ""
 prepare:
   - name: Use vault.centos.org repos (CS8 EOL workaround)
     script: |

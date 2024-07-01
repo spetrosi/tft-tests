@@ -21,7 +21,13 @@
 #
 # PYTHON_VERSION
 # Python version to install ansible-core with (EL 8, 9, 10 only).
-PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
+if rlIsFedora || rlIsRHELLike ">7"; then
+    PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
+# hardcode for el7 because it won\t update
+else
+    PYTHON_VERSION=3
+    rlRun "yum install python$PYTHON_VERSION-pip -y"
+fi
 
 SKIP_TAGS="--skip-tags tests::nvme,tests::infiniband"
 rolesInstallAnsible() {
@@ -151,14 +157,7 @@ rolesConvertToCollection() {
     rlRun "curl -L -o $TMT_TREE/runtime.yml $collection_script_url/lsr_role2collection/runtime.yml"
     # Remove role that was installed as a dependencie
     rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
-    if rlIsFedora || rlIsRHELLike ">7"; then
-        rlRun "python$PYTHON_VERSION -m pip install ruamel-yaml"
-    # el7
-    else
-        PYTHON_VERSION=3
-        rlRun "yum install python$PYTHON_VERSION-pip -y"
-        rlRun "python$PYTHON_VERSION -m pip install ruamel-yaml"
-    fi
+    rlRun "python$PYTHON_VERSION -m pip install ruamel-yaml"
     # Remove symlinks in tests/roles
     if [ -d "$role_path"/tests/roles ]; then
         find "$role_path"/tests/roles -type l -exec rm {} \;
@@ -179,51 +178,30 @@ rolesConvertToCollection() {
 
 rolesPrepareInventoryVars() {
     local role_path=$1
-    local inventory hostname tmt_tree_provision is_virtual guests_yml host_params
+    local inventory tmt_tree_provision is_virtual guests_yml host_params managed_nodes
     inventory="$role_path/inventory.yml"
-    hostname=managed_node
     # TMT_TOPOLOGY_ variables are not available in tmt try.
     # Reading topology from guests.yml for compatibility with tmt try
     tmt_tree_provision=${TMT_TREE%/*}/provision
     guests_yml=${tmt_tree_provision}/guests.yaml
     is_virtual=$(rolesIsVirtual "$tmt_tree_provision")
-    declare -A host_params
-    if head "$guests_yml" | grep -q 'managed_node:'; then
-        host_params[ansible_host]=$(< "$guests_yml" grep -oP -m 1 'topology-address: \K(.*)')
-    else
-        host_params[ansible_host]=$(< "$guests_yml" grep -oP -m 2 'topology-address: \K(.*)' | tail -1)
-    fi
-    if [ "$is_virtual" -eq 0 ]; then
-        host_params[ansible_ssh_private_key_file]="${tmt_tree_provision}/control_node/id_ecdsa"
-    fi
-    host_params[ansible_ssh_extra_args]="-o StrictHostKeyChecking=no"
+    managed_nodes=$(grep -P -o '^managed_node(\d+)?' "$guests_yml")
+    rlRun "python$PYTHON_VERSION -m pip install yq -q"
     if [ ! -f "$inventory" ]; then
         echo "---
 all:
   hosts:" > "$inventory"
     fi
-    echo "    $hostname:" >> "$inventory"
-    for key in "${!host_params[@]}"; do
-        echo "      ${key}: ${host_params[${key}]}" >> "$inventory"
+    for managed_node in $managed_nodes; do
+        ip_addr=$(yq ".$managed_node.\"primary-address\"" "$guests_yml")
+        echo "    $managed_node:" >> "$inventory"
+        echo "      ansible_host: $ip_addr" >> "$inventory"
+        echo "      ansible_ssh_extra_args: \"-o StrictHostKeyChecking=no\"" >> "$inventory"
+        if [ "$is_virtual" -eq 0 ]; then
+            echo "      ansible_ssh_private_key_file: ${tmt_tree_provision}/control_node/id_ecdsa" >> "$inventory"
+        fi
     done
     rlRun "echo $inventory"
-}
-
-# This function can be used to build inventory for multihost scenarios
-rolesBuildInventory() {
-    local inventory=$1
-    local hostname=$2
-    declare -n host_params=$3
-    if [ ! -f "$inventory" ]; then
-        echo "---
-all:
-  hosts:" > "$inventory"
-    fi
-    echo "    $hostname:" >> "$inventory"
-    for key in "${!host_params[@]}"; do
-        echo "      ${key}: ${host_params[${key}]}" >> "$inventory"
-    done
-    rlRun "cat $inventory"
 }
 
 rolesIsVirtual() {

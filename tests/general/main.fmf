@@ -5,3 +5,5 @@ duration: 6h
 tag: test_playbooks
 require:
     - git
+    # Required for yq
+    - jq

@@ -6,7 +6,7 @@ provision:
     # `connection: system` is for `how: virtual` to make VMs get a real IP to configure ssh easily
     # This setting is ignored on artemis so we can keep it
     connection: system
-  - name: managed_node
+  - name: managed_node1
     role: managed_node
     connection: system
 environment:
@@ -16,9 +16,9 @@ environment:
     SYSTEM_ROLES_ONLY_TESTS: ""
     PR_NUM: ""
 prepare:
-  - name: Use vault.centos.org repos (CS8 EOL workaround)
+  - name: Use vault.centos.org repos (CS 7, 8 EOL workaround)
     script: |
-      if grep -q 'CentOS Stream release 8' /etc/redhat-release; then
+      if grep -q 'CentOS Stream release 8' /etc/redhat-release || grep -q 'CentOS Linux release 7.9' /etc/redhat-release; then
         sed -i '/^mirror/d;s/#\(baseurl=http:\/\/\)mirror/\1vault/' /etc/yum.repos.d/*.repo
       fi
   - name: Enable epel on control node to install beakerlib
@@ -44,7 +44,12 @@ prepare:
 discover:
   - name: Run test playbooks from control_node
     how: fmf
-    filter: tag:test_playbooks
+    # url no needed when running from the tft-tests repository
+    # url: https://github.com/linux-system-roles/tft-tests
+    # ref: main
+    # url: https://github.com/spetrosi/tft-tests
+    # ref: add-tmt-tests
     where: control_node
+    filter: tag:test_playbooks
 execute:
     how: tmt

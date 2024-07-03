@@ -15,6 +15,11 @@ environment:
     PYTHON_VERSION: 3.12
     SYSTEM_ROLES_ONLY_TESTS: ""
     PR_NUM: ""
+    LINUXSYSTEMROLES_USER: ""
+    LINUXSYSTEMROLES_DOMAIN: ""
+    LINUXSYSTEMROLES_SSH_KEY: ""
+    ARTIFACTS_DIR: ""
+    ARTIFACTS_URL: ""
 prepare:
   - name: Use vault.centos.org repos (CS 7, 8 EOL workaround)
     script: |
@@ -24,10 +29,6 @@ prepare:
   - name: Enable epel on control node to install beakerlib
     how: feature
     epel: enabled
-    where: control_node
-  - name: Install beakerlib on control node for tests
-    how: install
-    package: beakerlib
     where: control_node
   - name: Install python on managed node when running CS8 with ansible!=2.9
     script: |

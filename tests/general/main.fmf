@@ -1,9 +1,10 @@
 summary: Test a system role
 framework: beakerlib
 test: ./test.sh
-duration: 6h
+duration: 2h
 tag: test_playbooks
 require:
+    - beakerlib
     - git
     # Required for yq
     - jq

@@ -17,10 +17,23 @@
 #  If empty, tests all tests in tests/tests_*.yml
 #
 # SYSTEM_ROLES_EXCLUDE_TESTS
-#   Optiona: Space separated names of test playbooks to exclude from test.
+#   Optional: Space separated names of test playbooks to exclude from test.
 #
+# GITHUB_ORG
+#   Optional: GitHub org to fetch test repository from. Default: linux-system-roles. Can be set to a fork for test purposes.
+#
+# LINUXSYSTEMROLES_SSH_KEY
+#   Optional: When provided, test uploads artifacts to LINUXSYSTEMROLES_DOMAIN instead of uploading them with rlFileSubmit "$logfile".
+#   A Single-line SSH key.
+#   When provided, requires LINUXSYSTEMROLES_USER and LINUXSYSTEMROLES_DOMAIN.
+# LINUXSYSTEMROLES_USER
+#   Username used when uploading artifacts.
+# LINUXSYSTEMROLES_DOMAIN: secondary01.fedoraproject.org
+#   Domain where to upload artifacts.
+
+GITHUB_ORG="${GITHUB_ORG:-linux-system-roles}"
 # PYTHON_VERSION
-# Python version to install ansible-core with (EL 8, 9, 10 only).
+#   Python version to install ansible-core with (EL 8, 9, 10 only).
 if rlIsFedora || rlIsRHELLike ">7"; then
     PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 # hardcode for el7 because it won\t update
@@ -31,6 +44,10 @@ fi
 
 SKIP_TAGS="--skip-tags tests::nvme,tests::infiniband"
 rolesInstallAnsible() {
+    if rlIsRHELLike 7; then
+        # Hardcode to the only supported version on EL 7
+        ANSIBLE_VER=2.9
+    fi
     if rlIsFedora || (rlIsRHELLike ">7" && [ "$ANSIBLE_VER" != "2.9" ]); then
         rlRun "dnf install python$PYTHON_VERSION-pip -y"
         rlRun "python$PYTHON_VERSION -m pip install ansible-core==$ANSIBLE_VER.*"
@@ -47,11 +64,14 @@ rolesInstallAnsible() {
 rolesCloneRepo() {
     local role_path=$1
     if [ ! -d "$REPO_NAME" ]; then
-        rlRun "git clone https://github.com/linux-system-roles/$REPO_NAME.git $role_path"
+        rlRun "git clone https://github.com/$GITHUB_ORG/$REPO_NAME.git $role_path"
     fi
     if [ -n "$PR_NUM" ]; then
-        rlRun "git -C $role_path fetch origin pull/$PR_NUM/head:test_pr"
-        rlRun "git -C $role_path checkout test_pr"
+        # git on EL7 doesn't support -C option
+        pushd "$role_path" || exit
+        rlRun "git fetch origin pull/$PR_NUM/head"
+        rlRun "git checkout FETCH_HEAD"
+        popd || exit
     fi
 }
 
@@ -178,12 +198,12 @@ rolesConvertToCollection() {
 
 rolesPrepareInventoryVars() {
     local role_path=$1
-    local inventory tmt_tree_provision is_virtual guests_yml host_params managed_nodes
+    local tmt_tree_provision=$2
+    local guests_yml=$3
+    local inventory is_virtual  managed_nodes
     inventory="$role_path/inventory.yml"
     # TMT_TOPOLOGY_ variables are not available in tmt try.
     # Reading topology from guests.yml for compatibility with tmt try
-    tmt_tree_provision=${TMT_TREE%/*}/provision
-    guests_yml=${tmt_tree_provision}/guests.yaml
     is_virtual=$(rolesIsVirtual "$tmt_tree_provision")
     managed_nodes=$(grep -P -o '^managed_node(\d+)?' "$guests_yml")
     rlRun "python$PYTHON_VERSION -m pip install yq -q"
@@ -211,6 +231,37 @@ rolesIsVirtual() {
     echo $?
 }
 
+rolesUploadLogs() {
+    local logfile=$1
+    local guests_yml=$2
+    local id_rsa_path pr_substr os artifact_dirname target_dir
+    if [ -z "$LINUXSYSTEMROLES_SSH_KEY" ]; then
+        rlFileSubmit "$logfile"
+        return
+    fi
+    id_rsa_path="$role_path/id_rsa"
+    echo "$LINUXSYSTEMROLES_SSH_KEY" | \
+        sed -e 's|-----BEGIN OPENSSH PRIVATE KEY----- |-----BEGIN OPENSSH PRIVATE KEY-----\n|' \
+        -e 's| -----END OPENSSH PRIVATE KEY-----|\n-----END OPENSSH PRIVATE KEY-----|' > "$id_rsa_path" # notsecret
+    chmod 600 "$id_rsa_path"
+    if [ -z "$ARTIFACTS_DIR" ]; then
+        os=$(yq '.control_node.facts."os-release-content".CENTOS_MANTISBT_PROJECT' "$guests_yml" | tr -d '""')
+        printf -v date '%(%Y%m%d-%H%M%S)T' -1
+        if [ -z "$PR_NUM" ]; then
+            pr_substr=_main
+        else
+            pr_substr=_$PR_NUM
+        fi
+        artifact_dirname=tmt-"$REPO_NAME""$pr_substr"_"$os"_"$date"/artifacts
+        target_dir="/srv/pub/alt/linuxsystemroles/logs"
+        ARTIFACTS_DIR="$target_dir"/"$artifact_dirname"
+        ARTIFACTS_URL=https://dl.fedoraproject.org/pub/alt/linuxsystemroles/logs/$artifact_dirname/
+    fi
+    ssh -i "$id_rsa_path" -o StrictHostKeyChecking=no "$LINUXSYSTEMROLES_USER"@"$LINUXSYSTEMROLES_DOMAIN" mkdir -p "$ARTIFACTS_DIR"
+    scp -i "$id_rsa_path" -o StrictHostKeyChecking=no "$logfile" "$LINUXSYSTEMROLES_USER"@"$LINUXSYSTEMROLES_DOMAIN":"$ARTIFACTS_DIR"/
+    rlLogInfo "Logs are uploaded at $ARTIFACTS_URL"
+}
+
 rolesRunPlaybook() {
     local tests_path=$1
     local test_playbook=$2
@@ -228,7 +279,7 @@ rolesRunPlaybook() {
         mv "$LOGFILE" "$logfile_name"
         LOGFILE=$logfile_name
     fi
-    rlFileSubmit "$LOGFILE"
+    rolesUploadLogs "$LOGFILE"
 }
 
 rlJournalStart
@@ -244,6 +295,8 @@ rlJournalStart
         else
             rlLogInfo "ANSIBLE_VER not defined - using system ansible if installed"
         fi
+        tmt_tree_provision=${TMT_TREE%/*}/provision
+        guests_yml=${tmt_tree_provision}/guests.yaml
         role_path=$TMT_TREE/$REPO_NAME
         rolesCloneRepo "$role_path"
         test_playbooks=$(rolesGetTests "$role_path")
@@ -255,7 +308,7 @@ rlJournalStart
         rolesInstallDependencies "$role_path" "$collection_path"
         rolesEnableCallbackPlugins "$collection_path"
         rolesConvertToCollection "$role_path" "$collection_path"
-        inventory=$(rolesPrepareInventoryVars "$role_path")
+        inventory=$(rolesPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
         rlRun "cat $inventory"
     rlPhaseEnd
 

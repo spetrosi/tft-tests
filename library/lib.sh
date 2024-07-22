@@ -29,7 +29,7 @@ rolesInstallAnsible() {
 
 rolesCloneRepo() {
     local role_path=$1
-    if [ ! -d "$REPO_NAME" ]; then
+    if [ ! -d "$role_path" ]; then
         rlRun "git clone https://github.com/$GITHUB_ORG/$REPO_NAME.git $role_path"
     fi
     if [ -n "$PR_NUM" ]; then

@@ -20,7 +20,8 @@ rolesInstallAnsible() {
     elif rlIsRHELLike 8; then
         PYTHON_VERSION=3.9
         rlRun "dnf install python$PYTHON_VERSION -y"
-        rlRun "python$PYTHON_VERSION -m pip install ansible==$ANSIBLE_VER.*"
+        # selinux needed for delegate_to: localhost for file, copy, etc.
+        rlRun "python$PYTHON_VERSION -m pip install ansible==$ANSIBLE_VER.* selinux"
     else
         # el7
         rlRun "yum install ansible-$ANSIBLE_VER.* -y"

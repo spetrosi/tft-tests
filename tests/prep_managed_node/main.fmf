@@ -1,0 +1,10 @@
+summary: Prepare managed node
+framework: beakerlib
+test: ./prep_managed_node.sh
+duration: 15min
+tag: prep_managed_node
+require:
+    - beakerlib
+    - git
+    # Required for yq
+    - jq

@@ -32,16 +32,12 @@ GITHUB_ORG="${GITHUB_ORG:-linux-system-roles}"
 #   Domain where to upload artifacts.
 # PYTHON_VERSION
 #   Python version to install ansible-core with (EL 8, 9, 10 only).
-if rlIsFedora || rlIsRHELLike ">7"; then
-    PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
-# hardcode for el7 because it won\t update
-else
-    PYTHON_VERSION=3
-    rlRun "yum install python$PYTHON_VERSION-pip -y"
-fi
 # SKIP_TAGS
 #   Ansible tags that must be skipped
 SKIP_TAGS="--skip-tags tests::nvme,tests::infiniband"
+# LSR_DEBUG
+#   Print output of ansible playbooks to terminal in addition to printing it to logfile
+LSR_DEBUG="${LSR_DEBUG:-false}"
 # REQUIRED_VARS
 #   Env variables required by this test
 REQUIRED_VARS=("ANSIBLE_VER" "REPO_NAME")
@@ -52,8 +48,7 @@ role_path=$TMT_TREE/$REPO_NAME
 
 rlJournalStart
     rlPhaseStartSetup
-        # rlImport "$tmt_tree_discover/Run-test-playbooks-from-control_node/libs/rolesLib/library/lib.sh"
-        rlRun "rlImport tft-tests/library"
+        rlRun "rlImport library"
         for required_var in "${REQUIRED_VARS[@]}"; do
             if [ -z "${!required_var}" ]; then
                 rlDie "This required variable is unset: $required_var "
@@ -77,16 +72,10 @@ rlJournalStart
         inventory=$(rolesPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
         rlRun "cat $inventory"
     rlPhaseEnd
-
     rlPhaseStartTest
         tests_path="$collection_path"/ansible_collections/fedora/linux_system_roles/tests/"$REPO_NAME"/
         for test_playbook in $test_playbooks; do
             rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$SKIP_TAGS"
         done
-    rlPhaseEnd
-
-    rlPhaseStartCleanup
-        rlRun "rm -r $collection_path" 0 "Remove tmp directory"
-        rlRun "rm -r $role_path" 0 "Remove role directory"
     rlPhaseEnd
 rlJournalEnd

@@ -8,7 +8,3 @@ require:
     - git
     # Required for yq
     - jq
-    - type: library
-      url: https://github.com/linux-system-roles/tft-tests
-      ref: main
-      name: /library

@@ -234,8 +234,13 @@ rolesRunPlaybook() {
     local test_playbook=$2
     local inventory=$3
     local skip_tags=$4
-    LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"
-    rlRun "ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -v &> $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+    local LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"
+    # If LSR_DEBUG is true, print output to terminal
+    if [ "$LSR_DEBUG" == true ] || [ "$LSR_DEBUG" == True ]; then
+        rlRun "DEFAULT_LOG_PATH=$LOGFILE ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -v" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+    else
+        rlRun "ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -v &> $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+    fi
     failed=$(grep 'PLAY RECAP' -A 1 "$LOGFILE" | tail -n 1 | grep -Po 'failed=\K(\d+)')
     rescued=$(grep 'PLAY RECAP' -A 1 "$LOGFILE" | tail -n 1 | grep -Po 'rescued=\K(\d+)')
     if [ "$failed" -gt "$rescued" ]; then
@@ -248,6 +253,104 @@ rolesRunPlaybook() {
         LOGFILE=$logfile_name
     fi
     rolesUploadLogs "$LOGFILE"
+}
+
+rolesCS8InstallPython() {
+    # Install python on managed node when running CS8 with ansible!=2.9
+    if [ "$ANSIBLE_VER" != "2.9" ] && grep -q 'CentOS Stream release 8' /etc/redhat-release; then
+        rlRun "dnf install -y python$PYTHON_VERSION"
+    fi
+}
+
+rolesDistributeSSHKeys() {
+    # name: Distribute SSH keys when provisioned with how=virtual
+    local tmt_tree_provision=$1
+    local control_node_id_ecdsa_pub=$tmt_tree_provision/control_node/id_ecdsa.pub
+    if [ -f "$control_node_id_ecdsa_pub" ]; then
+        cat "$control_node_id_ecdsa_pub" >> ~/.ssh/authorized_keys
+    fi
+}
+
+rolesEnableHA() {
+# This function enables the ha repository on platforms that require it and do not have it enabled by default
+# The ha repository is required by the mssql and ha_cluster roles
+    local ha_reponame
+    if rlIsRHELLike 7; then
+        return
+    fi
+    if rlIsRHELLike 8; then
+        ha_reponame=ha
+    elif rlIsRHELLike ">8"; then
+        ha_reponame=highavailability
+    fi
+    rlRun "dnf config-manager --set-enabled $ha_reponame"
+}
+
+rolesDisableNFV() {
+    # The nfv-source repo causes troubles in CentOS-9 Stream compose while system-roles testing
+    if [ "$(find /etc/yum.repos.d/ -name 'centos-addons.repo' | wc -l )" -gt 0 ]; then
+        rlRun "sed -i '/^\[nfv-source\]/,/^$/d' /etc/yum.repos.d/centos-addons.repo"
+    fi
+}
+
+rolesGenerateTestDiscs() {
+# This function generates test disks from provision.fmf
+# This is required by storage and snapshot roles
+    local role_path=$1
+    local provisionfmf="$role_path"/tests/provision.fmf
+    local -i i=0
+    local disk_provisioner_dir TARGETCLI_CMD disks disk file
+    rolesCloneRepo "$role_path"
+    if [ ! -f "$provisionfmf" ]; then
+        rlRun "rm -rf ${role_path}"
+        return
+    fi
+    if ! grep -q drive: "$provisionfmf"; then
+        rlRun "rm -rf ${role_path}"
+        return
+    fi
+    if type -p python3; then
+        PYTHON=python3
+    elif type -p python; then
+        PYTHON=python
+    elif type -p python2; then
+        PYTHON=python2
+    else
+        echo ERROR: no python interpreter found
+        exit 1
+    fi
+    if ! type -p yq; then
+        rlRun "yum install $PYTHON-pip -y"
+        rlRun "$PYTHON -m pip install yq"
+    fi
+    if ! type -p targetcli; then
+        rlRun "yum install targetcli -y"
+    fi
+    disks=$(yq '."standard-inventory-qcow2".qemu.drive[].size' "$provisionfmf")
+    # Nothing to do
+    [ -z "$disks" ] && return
+
+    disk_provisioner_dir=$(mktemp --directory)
+
+    TARGETCLI_CMD="set global auto_cd_after_create=true
+/loopback create
+set global auto_cd_after_create=false"
+
+    # Save iSCSI target config
+    rlRun "targetcli / saveconfig savefile=${disk_provisioner_dir}/target_backup.json"
+
+    for disk in $disks; do
+        file="${disk_provisioner_dir}/disk${i}"
+        rlRun "truncate -s $disk $file"
+		TARGETCLI_CMD="${TARGETCLI_CMD}
+/backstores/fileio create disk${i} ${file}
+luns/ create /backstores/fileio/disk${i}"
+        ((++i))
+    done
+    targetcli <<< "$TARGETCLI_CMD"
+
+    rlRun "rm -rf ${disk_provisioner_dir}"
+    rlRun "rm -rf ${role_path}"
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

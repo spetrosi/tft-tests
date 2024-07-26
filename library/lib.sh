@@ -237,9 +237,9 @@ rolesRunPlaybook() {
     local LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"
     # If LSR_DEBUG is true, print output to terminal
     if [ "$LSR_DEBUG" == true ] || [ "$LSR_DEBUG" == True ]; then
-        rlRun "DEFAULT_LOG_PATH=$LOGFILE ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -v" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+        rlRun "DEFAULT_LOG_PATH=$LOGFILE ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -vv" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
     else
-        rlRun "ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -v &> $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+        rlRun "ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -vv &> $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
     fi
     failed=$(grep 'PLAY RECAP' -A 1 "$LOGFILE" | tail -n 1 | grep -Po 'failed=\K(\d+)')
     rescued=$(grep 'PLAY RECAP' -A 1 "$LOGFILE" | tail -n 1 | grep -Po 'rescued=\K(\d+)')
@@ -293,7 +293,7 @@ rolesDisableNFV() {
     fi
 }
 
-rolesGenerateTestDiscs() {
+rolesGenerateTestDisks() {
 # This function generates test disks from provision.fmf
 # This is required by storage and snapshot roles
     local role_path=$1
@@ -315,6 +315,8 @@ rolesGenerateTestDiscs() {
         PYTHON=python
     elif type -p python2; then
         PYTHON=python2
+    elif  [ -f /usr/libexec/platform-python ]; then
+        PYTHON=/usr/libexec/platform-python
     else
         echo ERROR: no python interpreter found
         exit 1
@@ -330,7 +332,12 @@ rolesGenerateTestDiscs() {
     # Nothing to do
     [ -z "$disks" ] && return
 
-    disk_provisioner_dir=$(mktemp --directory)
+    # disk_provisioner needs at least 10GB - if /tmp does not have enough space, use /var/tmp
+    if rolesCheckPartitionSize "/tmp" -gt 10485760; then
+        disk_provisioner_dir=$(mktemp --directory --tmpdir=/tmp)
+    else
+        disk_provisioner_dir=$(mktemp --directory --tmpdir=/var/tmp)
+    fi
 
     TARGETCLI_CMD="set global auto_cd_after_create=true
 /loopback create

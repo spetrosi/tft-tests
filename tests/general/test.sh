@@ -9,6 +9,10 @@
 # REPO_NAME
 #   Name of the role repository to test.
 #
+# TEST_LOCAL_CHANGES
+#   Optional: When true, tests from local changes. When false, test from a repository PR number (when PR_NUM is set) or main branch.
+TEST_LOCAL_CHANGES="${TEST_LOCAL_CHANGES:-false}"
+#
 # PR_NUM
 #   Optional: Number of PR to test. If empty, tests the default branch.
 #
@@ -32,6 +36,13 @@ GITHUB_ORG="${GITHUB_ORG:-linux-system-roles}"
 #   Domain where to upload artifacts.
 # PYTHON_VERSION
 #   Python version to install ansible-core with (EL 8, 9, 10 only).
+if rlIsFedora || rlIsRHELLike ">7"; then
+    PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
+# hardcode for el7 because it won\t update
+else
+    PYTHON_VERSION=3
+    rlRun "yum install python$PYTHON_VERSION-pip -y"
+fi
 # SKIP_TAGS
 #   Ansible tags that must be skipped
 SKIP_TAGS="--skip-tags tests::nvme,tests::infiniband"
@@ -44,7 +55,6 @@ REQUIRED_VARS=("ANSIBLE_VER" "REPO_NAME")
 
 tmt_tree_provision=${TMT_TREE%/*}/provision
 guests_yml=${tmt_tree_provision}/guests.yaml
-role_path=$TMT_TREE/$REPO_NAME
 
 rlJournalStart
     rlPhaseStartSetup
@@ -59,13 +69,19 @@ rlJournalStart
         else
             rlLogInfo "ANSIBLE_VER not defined - using system ansible if installed"
         fi
-        rolesCloneRepo "$role_path"
+        if [ "$TEST_LOCAL_CHANGES" == true ] || [ "$TEST_LOCAL_CHANGES" == True ]; then
+            rlLog "Test from local changes"
+            role_path=$TMT_TREE
+        else
+            role_path=$TMT_TREE/$REPO_NAME
+            rolesCloneRepo "$role_path"
+        fi
         test_playbooks=$(rolesGetTests "$role_path")
         rlLogInfo "Test playbooks: $test_playbooks"
         for test_playbook in $test_playbooks; do
             rolesHandleVault "$role_path" "$test_playbook"
         done
-        rlRun "collection_path=$(TMPDIR=$TMT_TREE mktemp --directory)"
+        collection_path=$(mktemp --directory)
         rolesInstallDependencies "$role_path" "$collection_path"
         rolesEnableCallbackPlugins "$collection_path"
         rolesConvertToCollection "$role_path" "$collection_path"

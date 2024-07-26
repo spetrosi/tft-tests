@@ -14,13 +14,14 @@ environment:
     REPO_NAME: ""
     PYTHON_VERSION: 3.12
     SYSTEM_ROLES_ONLY_TESTS: ""
+    TEST_LOCAL_CHANGES: false
     PR_NUM: ""
     LINUXSYSTEMROLES_USER: ""
     LINUXSYSTEMROLES_DOMAIN: ""
     LINUXSYSTEMROLES_SSH_KEY: ""
     ARTIFACTS_DIR: ""
     ARTIFACTS_URL: ""
-    LSR_DEBUG: true
+    LSR_DEBUG: false
 prepare:
   - name: Use vault.centos.org repos (CS 7, 8 EOL workaround)
     script: |

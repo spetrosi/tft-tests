@@ -14,6 +14,10 @@ rolesInstallAnsible() {
         # Hardcode to the only supported version on EL 7
         ANSIBLE_VER=2.9
     fi
+    if rlIsRHELLike 8 && [ "$ANSIBLE_VER" != "2.9" ]; then
+        # CentOS-8 supports either 2.9 or 2.16
+        ANSIBLE_VER=2.16
+    fi
     if rlIsFedora || (rlIsRHELLike ">7" && [ "$ANSIBLE_VER" != "2.9" ]); then
         rlRun "dnf install python$PYTHON_VERSION-pip -y"
         rlRun "python$PYTHON_VERSION -m pip install ansible-core==$ANSIBLE_VER.*"
@@ -39,6 +43,9 @@ rolesCloneRepo() {
         rlRun "git fetch origin pull/$PR_NUM/head"
         rlRun "git checkout FETCH_HEAD"
         popd || exit
+        rlLog "Test from the pull request $PR_NUM"
+    else
+        rlLog "Test from the main branch"
     fi
 }
 
@@ -117,7 +124,7 @@ rolesEnableCallbackPlugins() {
     # Enable callback plugins for prettier ansible output
     callback_path=ansible_collections/ansible/posix/plugins/callback
     if [ ! -f "$collection_path"/"$callback_path"/debug.py ] || [ ! -f "$collection_path"/"$callback_path"/profile_tasks.py ]; then
-        ansible_posix=$(TMPDIR=$TMT_TREE mktemp --directory)
+        ansible_posix=$(mktemp --directory)
         rlRun "ansible-galaxy collection install ansible.posix -p $ansible_posix -vv"
         if [ ! -d "$1"/"$callback_path"/ ]; then
             rlRun "mkdir -p $collection_path/$callback_path"
@@ -267,7 +274,7 @@ rolesDistributeSSHKeys() {
     local tmt_tree_provision=$1
     local control_node_id_ecdsa_pub=$tmt_tree_provision/control_node/id_ecdsa.pub
     if [ -f "$control_node_id_ecdsa_pub" ]; then
-        cat "$control_node_id_ecdsa_pub" >> ~/.ssh/authorized_keys
+        rlRun "cat $control_node_id_ecdsa_pub >> ~/.ssh/authorized_keys"
     fi
 }
 
@@ -283,7 +290,9 @@ rolesEnableHA() {
     elif rlIsRHELLike ">8"; then
         ha_reponame=highavailability
     fi
-    rlRun "dnf config-manager --set-enabled $ha_reponame"
+    if [ -n "$ha_reponame" ]; then
+        rlRun "dnf config-manager --set-enabled $ha_reponame"
+    fi
 }
 
 rolesDisableNFV() {
@@ -296,11 +305,17 @@ rolesDisableNFV() {
 rolesGenerateTestDisks() {
 # This function generates test disks from provision.fmf
 # This is required by storage and snapshot roles
-    local role_path=$1
-    local provisionfmf="$role_path"/tests/provision.fmf
+    local provisionfmf
     local -i i=0
     local disk_provisioner_dir TARGETCLI_CMD disks disk file
-    rolesCloneRepo "$role_path"
+    if [ "$TEST_LOCAL_CHANGES" == true ] || [ "$TEST_LOCAL_CHANGES" == True ]; then
+        rlLog "Test from local changes"
+        role_path=$TMT_TREE
+    else
+        role_path=$TMT_TREE/$REPO_NAME
+        rolesCloneRepo "$role_path"
+    fi
+    provisionfmf="$role_path"/tests/provision.fmf
     if [ ! -f "$provisionfmf" ]; then
         rlRun "rm -rf ${role_path}"
         return
@@ -309,26 +324,8 @@ rolesGenerateTestDisks() {
         rlRun "rm -rf ${role_path}"
         return
     fi
-    if type -p python3; then
-        PYTHON=python3
-    elif type -p python; then
-        PYTHON=python
-    elif type -p python2; then
-        PYTHON=python2
-    elif  [ -f /usr/libexec/platform-python ]; then
-        PYTHON=/usr/libexec/platform-python
-    else
-        echo ERROR: no python interpreter found
-        exit 1
-    fi
-    if ! type -p yq; then
-        rlRun "yum install $PYTHON-pip -y"
-        rlRun "$PYTHON -m pip install yq"
-    fi
-    if ! type -p targetcli; then
-        rlRun "yum install targetcli -y"
-    fi
-    disks=$(yq '."standard-inventory-qcow2".qemu.drive[].size' "$provisionfmf")
+    rlRun "yum install targetcli -y"
+    disks=$(sed -rn 's/^\s*-?\s+size:\s+(.*)/\1/p' "$provisionfmf")
     # Nothing to do
     [ -z "$disks" ] && return
 
@@ -342,9 +339,6 @@ rolesGenerateTestDisks() {
     TARGETCLI_CMD="set global auto_cd_after_create=true
 /loopback create
 set global auto_cd_after_create=false"
-
-    # Save iSCSI target config
-    rlRun "targetcli / saveconfig savefile=${disk_provisioner_dir}/target_backup.json"
 
     for disk in $disks; do
         file="${disk_provisioner_dir}/disk${i}"

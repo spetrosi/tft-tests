@@ -16,7 +16,6 @@ REQUIRED_VARS=("REPO_NAME")
 #   Python version to install ansible-core with (EL 8, 9, 10 only).
 
 tmt_tree_provision=${TMT_TREE%/*}/provision
-role_path=$TMT_TREE/$REPO_NAME
 
 rlJournalStart
     rlPhaseStartSetup
@@ -30,6 +29,6 @@ rlJournalStart
         rolesDistributeSSHKeys "$tmt_tree_provision"
         rolesEnableHA
         rolesDisableNFV
-        rolesGenerateTestDiscs "$role_path"
+        rolesGenerateTestDisks
     rlPhaseEnd
 rlJournalEnd

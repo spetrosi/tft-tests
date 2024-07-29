@@ -81,28 +81,35 @@ rolesGetTests() {
 # Handle Ansible Vault encrypted variables
 rolesHandleVault() {
     local role_path=$1
-    local playbook_file=$2
-    local vault_pwd_file="$role_path/vault_pwd"
-    local vault_variables_file="$role_path/vars/vault-variables.yml"
-    local no_vault_file="$role_path/no-vault-variables.txt"
+    local playbook_file=$role_path/tests/$2
+    local vault_pwd_file=$role_path/tests/vault_pwd
+    local vault_variables_file=$role_path/tests/vars/vault-variables.yml
+    local no_vault_file=$role_path/no-vault-variables.txt
     local vault_play
 
-    if [ -f "$vault_pwd_file" ] && [ -f "$vault_variables_file" ]; then
+    if [ ! -f "$vault_pwd_file" ] || [ ! -f "$vault_variables_file" ]; then
+        rlLogInfo "Skipping vault variables because $vault_pwd_file and $vault_variables_file don't exist"
+        return
+    fi
+    if [ -f "$no_vault_file" ]; then
         if grep -q "^${playbook_file}\$" "$no_vault_file"; then
             rlLogInfo "Skipping vault variables because $3/$2 is in no-vault-variables.txt"
-        else
-            rlLogInfo "Including vault variables in $playbook_file"
-            vault_play="- hosts: all
+            return
+        fi
+    fi
+    rlLogInfo "Including vault variables in $playbook_file"
+    export ANSIBLE_VAULT_PASSWORD_FILE="$vault_pwd_file"
+    vault_play="---
+- hosts: all
   gather_facts: false
   tasks:
     - name: Include vault variables
       include_vars:
         file: $vault_variables_file"
-            rlRun "sed -i \"s|---||$vault_play\" $playbook_file"
-        fi
-    else
-        rlLogInfo "Skipping vault variables because $vault_pwd_file and $vault_variables_file don't exist"
-    fi
+    sed -i "/---/d" "$playbook_file"
+    cat <<< "$vault_play
+$(cat "$playbook_file")" > "$playbook_file".tmp
+    mv "$playbook_file".tmp "$playbook_file"
 }
 
 rolesInstallDependencies() {

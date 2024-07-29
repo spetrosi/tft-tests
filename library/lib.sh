@@ -35,7 +35,7 @@ rolesInstallAnsible() {
 rolesCloneRepo() {
     local role_path=$1
     if [ ! -d "$role_path" ]; then
-        rlRun "git clone https://github.com/$GITHUB_ORG/$REPO_NAME.git $role_path"
+        rlRun "git clone https://github.com/$GITHUB_ORG/$REPO_NAME.git $role_path --depth 1"
     fi
     if [ -n "$PR_NUM" ]; then
         # git on EL7 doesn't support -C option
@@ -92,8 +92,9 @@ rolesHandleVault() {
         return
     fi
     if [ -f "$no_vault_file" ]; then
-        if grep -q "^${playbook_file}\$" "$no_vault_file"; then
-            rlLogInfo "Skipping vault variables because $3/$2 is in no-vault-variables.txt"
+        playbook_file_bsn=$(basename "$playbook_file")
+        if grep -q "^${playbook_file_bsn}\$" "$no_vault_file"; then
+            rlLogInfo "Skipping vault variables because $playbook_file_bsn is in no-vault-variables.txt"
             return
         fi
     fi
@@ -154,8 +155,18 @@ rolesConvertToCollection() {
     local coll_namespace=fedora
     local coll_name=linux_system_roles
     local subrole_prefix=private_"$REPO_NAME"_subrole_
-    rlRun "curl -L -o $TMT_TREE/lsr_role2collection.py $collection_script_url/lsr_role2collection.py"
-    rlRun "curl -L -o $TMT_TREE/runtime.yml $collection_script_url/lsr_role2collection/runtime.yml"
+    local tmpdir=/tmp/lsr_role2collection
+    local lsr_role2collection=$tmpdir/lsr_role2collection.py
+    local runtime=$tmpdir/runtime.yml
+    if [ ! -d "$tmpdir" ]; then
+        mkdir -p "$tmpdir"
+    fi
+    if [ ! -f "$lsr_role2collection" ]; then
+        rlRun "curl -L -o $lsr_role2collection $collection_script_url/lsr_role2collection.py"
+    fi
+    if [ ! -f "$runtime" ]; then
+        rlRun "curl -L -o $runtime $collection_script_url/lsr_role2collection/runtime.yml"
+    fi
     # Remove role that was installed as a dependencie
     rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
     rlRun "python$PYTHON_VERSION -m pip install ruamel-yaml"
@@ -166,8 +177,8 @@ rolesConvertToCollection() {
             rlRun "rm -r $role_path/tests/roles/linux-system-roles.$REPO_NAME"
         fi
     fi
-    rlRun "python$PYTHON_VERSION $TMT_TREE/lsr_role2collection.py \
---meta-runtime $TMT_TREE/runtime.yml \
+    rlRun "python$PYTHON_VERSION $lsr_role2collection \
+--meta-runtime $runtime \
 --src-owner linux-system-roles \
 --role $REPO_NAME \
 --src-path $role_path \

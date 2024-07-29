@@ -94,7 +94,7 @@ rolesHandleVault() {
     if [ -f "$no_vault_file" ]; then
         playbook_file_bsn=$(basename "$playbook_file")
         if grep -q "^${playbook_file_bsn}\$" "$no_vault_file"; then
-            rlLogInfo "Skipping vault variables because $3/$2 is in no-vault-variables.txt"
+            rlLogInfo "Skipping vault variables because $playbook_file_bsn is in no-vault-variables.txt"
             return
         fi
     fi

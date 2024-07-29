@@ -48,7 +48,11 @@ fi
 SKIP_TAGS="--skip-tags tests::nvme,tests::infiniband"
 # LSR_DEBUG
 #   Print output of ansible playbooks to terminal in addition to printing it to logfile
-LSR_DEBUG="${LSR_DEBUG:-false}"
+if [ "$(echo "$SYSTEM_ROLES_ONLY_TESTS" | wc -w)" -eq 1 ]; then
+    LSR_DEBUG=true
+else
+    LSR_DEBUG="${LSR_DEBUG:-false}"
+fi
 # REQUIRED_VARS
 #   Env variables required by this test
 REQUIRED_VARS=("ANSIBLE_VER" "REPO_NAME")

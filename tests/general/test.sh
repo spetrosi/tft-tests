@@ -46,12 +46,12 @@ fi
 # SKIP_TAGS
 #   Ansible tags that must be skipped
 SKIP_TAGS="--skip-tags tests::nvme,tests::infiniband"
-# LSR_DEBUG
+# LSR_TFT_DEBUG
 #   Print output of ansible playbooks to terminal in addition to printing it to logfile
 if [ "$(echo "$SYSTEM_ROLES_ONLY_TESTS" | wc -w)" -eq 1 ]; then
-    LSR_DEBUG=true
+    LSR_TFT_DEBUG=true
 else
-    LSR_DEBUG="${LSR_DEBUG:-false}"
+    LSR_TFT_DEBUG="${LSR_TFT_DEBUG:-false}"
 fi
 # REQUIRED_VARS
 #   Env variables required by this test

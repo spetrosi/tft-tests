@@ -21,7 +21,7 @@ environment:
     LINUXSYSTEMROLES_SSH_KEY: ""
     ARTIFACTS_DIR: ""
     ARTIFACTS_URL: ""
-    LSR_DEBUG: false
+    LSR_TFT_DEBUG: false
 prepare:
   - name: Use vault.centos.org repos (CS 7, 8 EOL workaround)
     script: |

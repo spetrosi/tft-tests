@@ -260,8 +260,8 @@ rolesRunPlaybook() {
     local inventory=$3
     local skip_tags=$4
     local LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"
-    # If LSR_DEBUG is true, print output to terminal
-    if [ "$LSR_DEBUG" == true ] || [ "$LSR_DEBUG" == True ]; then
+    # If LSR_TFT_DEBUG is true, print output to terminal
+    if [ "$LSR_TFT_DEBUG" == true ] || [ "$LSR_TFT_DEBUG" == True ]; then
         rlRun "DEFAULT_LOG_PATH=$LOGFILE ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -vv" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
     else
         rlRun "ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -vv &> $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"

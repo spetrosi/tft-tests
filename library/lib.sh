@@ -260,23 +260,16 @@ rolesRunPlaybook() {
     local inventory=$3
     local skip_tags=$4
     local LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"
+    local result=FAIL
     # If LSR_TFT_DEBUG is true, print output to terminal
     if [ "$LSR_TFT_DEBUG" == true ] || [ "$LSR_TFT_DEBUG" == True ]; then
-        rlRun "DEFAULT_LOG_PATH=$LOGFILE ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -vv" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+        rlRun "ANSIBLE_LOG_PATH=$LOGFILE ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -vv && result=SUCCESS" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
     else
-        rlRun "ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -vv &> $LOGFILE" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+        rlRun "ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -vv &> $LOGFILE && result=SUCCESS" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
     fi
-    failed=$(grep 'PLAY RECAP' -A 1 "$LOGFILE" | tail -n 1 | grep -Po 'failed=\K(\d+)')
-    rescued=$(grep 'PLAY RECAP' -A 1 "$LOGFILE" | tail -n 1 | grep -Po 'rescued=\K(\d+)')
-    if [ "$failed" -gt "$rescued" ]; then
-        logfile_name=$LOGFILE-FAIL.log
-        mv "$LOGFILE" "$logfile_name"
-        LOGFILE=$logfile_name
-    else
-        logfile_name=$LOGFILE-SUCCESS.log
-        mv "$LOGFILE" "$logfile_name"
-        LOGFILE=$logfile_name
-    fi
+    logfile_name=$LOGFILE-$result.log
+    mv "$LOGFILE" "$logfile_name"
+    LOGFILE=$logfile_name
     rolesUploadLogs "$LOGFILE"
 }
 

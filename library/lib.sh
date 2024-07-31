@@ -20,12 +20,12 @@ rolesInstallAnsible() {
     fi
     if rlIsFedora || (rlIsRHELLike ">7" && [ "$ANSIBLE_VER" != "2.9" ]); then
         rlRun "dnf install python$PYTHON_VERSION-pip -y"
-        rlRun "python$PYTHON_VERSION -m pip install ansible-core==$ANSIBLE_VER.*"
+        rlRun "python$PYTHON_VERSION -m pip install ansible-core==$ANSIBLE_VER.* passlib"
     elif rlIsRHELLike 8; then
         PYTHON_VERSION=3.9
         rlRun "dnf install python$PYTHON_VERSION -y"
         # selinux needed for delegate_to: localhost for file, copy, etc.
-        rlRun "python$PYTHON_VERSION -m pip install ansible==$ANSIBLE_VER.* selinux"
+        rlRun "python$PYTHON_VERSION -m pip install ansible==$ANSIBLE_VER.* selinux passlib"
     else
         # el7
         rlRun "yum install ansible-$ANSIBLE_VER.* -y"

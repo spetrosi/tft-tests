@@ -72,13 +72,7 @@ rlJournalStart
         else
             rlLogInfo "ANSIBLE_VER not defined - using system ansible if installed"
         fi
-        if [ "$TEST_LOCAL_CHANGES" == true ] || [ "$TEST_LOCAL_CHANGES" == True ]; then
-            rlLog "Test from local changes"
-            role_path=$TMT_TREE
-        else
-            role_path=$TMT_TREE/$REPO_NAME
-            rolesCloneRepo "$role_path"
-        fi
+        role_path=$(getRoleDir)
         test_playbooks=$(rolesGetTests "$role_path")
         rlLogInfo "Test playbooks: $test_playbooks"
         if [ -z "$test_playbooks" ]; then
@@ -87,7 +81,7 @@ rlJournalStart
         for test_playbook in $test_playbooks; do
             rolesHandleVault "$role_path" "$test_playbook"
         done
-        collection_path=$(mktemp --directory)
+        collection_path=$(mktemp --directory -t collections-XXX)
         rolesInstallDependencies "$role_path" "$collection_path"
         rolesEnableCallbackPlugins "$collection_path"
         rolesConvertToCollection "$role_path" "$collection_path"

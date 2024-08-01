@@ -35,9 +35,7 @@ rolesInstallAnsible() {
 
 rolesCloneRepo() {
     local role_path=$1
-    if [ ! -d "$role_path" ]; then
-        rlRun "git clone https://github.com/$GITHUB_ORG/$REPO_NAME.git $role_path --depth 1"
-    fi
+    rlRun "git clone https://github.com/$GITHUB_ORG/$REPO_NAME.git $role_path --depth 1"
     if [ -n "$PR_NUM" ]; then
         # git on EL7 doesn't support -C option
         pushd "$role_path" || exit
@@ -47,6 +45,17 @@ rolesCloneRepo() {
         rlLog "Test from the pull request $PR_NUM"
     else
         rlLog "Test from the main branch"
+    fi
+}
+
+getRoleDir() {
+    if [ "$TEST_LOCAL_CHANGES" == true ] || [ "$TEST_LOCAL_CHANGES" == True ]; then
+        rlLog "Test from local changes"
+        echo "$TMT_TREE"
+    else
+        role_path=$(mktemp --directory -t "$REPO_NAME"-XXX)
+        rolesCloneRepo "$role_path"
+        echo "$role_path"
     fi
 }
 
@@ -117,13 +126,14 @@ $(cat "$playbook_file")" > "$playbook_file".tmp
 rolesInstallDependencies() {
     local coll_req_file="$1/meta/collection-requirements.yml"
     local coll_test_req_file="$1/tests/collection-requirements.yml"
+    collection_path=$(mktemp --directory -t collections-XXX)
     for req_file in $coll_req_file $coll_test_req_file; do
         if [ ! -f "$req_file" ]; then
             rlLogInfo "Skipping installing dependencies from $req_file, this file doesn't exist"
         else
             rlRun "ansible-galaxy collection install -p $2 -vv -r $req_file"
-            rlRun "export ANSIBLE_COLLECTIONS_PATHS=$2"
-            rlLogInfo "Dependencies were successfully installed"
+            rlRun "export ANSIBLE_COLLECTIONS_PATH=$2"
+            rlLogInfo "$req_file Dependencies were successfully installed"
         fi
     done
 }
@@ -133,8 +143,8 @@ rolesEnableCallbackPlugins() {
     # Enable callback plugins for prettier ansible output
     callback_path=ansible_collections/ansible/posix/plugins/callback
     if [ ! -f "$collection_path"/"$callback_path"/debug.py ] || [ ! -f "$collection_path"/"$callback_path"/profile_tasks.py ]; then
-        ansible_posix=$(mktemp --directory)
-        rlRun "ansible-galaxy collection install ansible.posix -p $ansible_posix -vv"
+        ansible_posix=$(mktemp --directory -t ansible_posix-XXX)
+        rlRun "ansible-galaxy collection install ansible.posix -p $ansible_posix -vv --force"
         if [ ! -d "$1"/"$callback_path"/ ]; then
             rlRun "mkdir -p $collection_path/$callback_path"
         fi
@@ -320,13 +330,7 @@ rolesGenerateTestDisks() {
     local provisionfmf
     local -i i=0
     local disk_provisioner_dir TARGETCLI_CMD disks disk file
-    if [ "$TEST_LOCAL_CHANGES" == true ] || [ "$TEST_LOCAL_CHANGES" == True ]; then
-        rlLog "Test from local changes"
-        role_path=$TMT_TREE
-    else
-        role_path=$TMT_TREE/$REPO_NAME
-        rolesCloneRepo "$role_path"
-    fi
+    role_path=$(getRoleDir)
     provisionfmf="$role_path"/tests/provision.fmf
     if [ ! -f "$provisionfmf" ]; then
         rlRun "rm -rf ${role_path}"

@@ -25,9 +25,13 @@ environment:
 prepare:
   - name: Use vault.centos.org repos (CS 7, 8 EOL workaround)
     script: |
-      if grep -q -e 'CentOS Stream release 8' -e 'CentOS Linux release 7.9' /etc/redhat-release; then
+      if grep -q 'CentOS Stream release 8' /etc/redhat-release; then
         sed -i '/^mirror/d;s/#\(baseurl=http:\/\/\)mirror/\1vault/' /etc/yum.repos.d/*.repo
       fi
+      if grep -q 'CentOS Linux release 7.9' /etc/redhat-release; then
+        sed -i '/^mirror/d;s/#\?\(baseurl=http:\/\/\)mirror/\1vault/' /etc/yum.repos.d/*.repo
+      fi
+
   - name: Enable epel to install beakerlib on all platforms except CS10 and Fedora, there epel not available and not needed
     script: |
       if ! grep -q -e 'CentOS Stream release 10' -e 'Fedora release' /etc/redhat-release; then

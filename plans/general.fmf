@@ -31,12 +31,14 @@ prepare:
       if grep -q 'CentOS Linux release 7.9' /etc/redhat-release; then
         sed -i '/^mirror/d;s/#\?\(baseurl=http:\/\/\)mirror/\1vault/' /etc/yum.repos.d/*.repo
       fi
-
-  - name: Enable epel to install beakerlib on all platforms except CS10 and Fedora, there epel not available and not needed
+  - name: Enable epel to install beakerlib
     script: |
-      if ! grep -q -e 'CentOS Stream release 10' -e 'Fedora release' /etc/redhat-release; then
-        yum install epel-release -y
+      # CS 10 and Fedora doesn't require epel
+      if grep -q -e 'CentOS Stream release 10' -e 'Fedora release' /etc/redhat-release; then
+        exit 0
       fi
+      yum install epel-release yum-utils -y
+      yum-config-manager --enable epel epel-debuginfo epel-source
 discover:
   - name: Prepare managed node
     how: fmf

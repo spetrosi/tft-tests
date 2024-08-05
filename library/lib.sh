@@ -28,7 +28,7 @@ rolesInstallAnsible() {
         rlRun "python$PYTHON_VERSION -m pip install ansible==$ANSIBLE_VER.* selinux passlib"
     else
         # el7
-        rlRun "yum install ansible-$ANSIBLE_VER.* -y"
+        rlRun "yum install python$PYTHON_VERSION-pip ansible-$ANSIBLE_VER.* -y"
     fi
 }
 

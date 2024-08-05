@@ -41,7 +41,6 @@ if rlIsFedora || rlIsRHELLike ">7"; then
 # hardcode for el7 because it won\t update
 else
     PYTHON_VERSION=3
-    rlRun "yum install python$PYTHON_VERSION-pip -y"
 fi
 # SKIP_TAGS
 #   Ansible tags that must be skipped

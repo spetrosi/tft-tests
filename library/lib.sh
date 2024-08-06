@@ -25,6 +25,7 @@ rolesInstallAnsible() {
         PYTHON_VERSION=3.9
         rlRun "dnf install python$PYTHON_VERSION -y"
         # selinux needed for delegate_to: localhost for file, copy, etc.
+        # Providing passlib for password_hash module, see https://issues.redhat.com/browse/SYSROLES-81
         rlRun "python$PYTHON_VERSION -m pip install ansible==$ANSIBLE_VER.* selinux passlib"
     else
         # el7
@@ -84,7 +85,7 @@ rolesHandleVault() {
     local playbook_file=$role_path/tests/$2
     local vault_pwd_file=$role_path/tests/vault_pwd
     local vault_variables_file=$role_path/tests/vars/vault-variables.yml
-    local no_vault_file=$role_path/no-vault-variables.txt
+    local no_vault_file=$role_path/tests/no-vault-variables.txt
     local vault_play
 
     if [ ! -f "$vault_pwd_file" ] || [ ! -f "$vault_variables_file" ]; then

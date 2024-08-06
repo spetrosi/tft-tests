@@ -31,6 +31,7 @@ prepare:
       if grep -q 'CentOS Linux release 7.9' /etc/redhat-release; then
         sed -i '/^mirror/d;s/#\?\(baseurl=http:\/\/\)mirror/\1vault/' /etc/yum.repos.d/*.repo
       fi
+  # Replace with feature: epel: enabled once https://github.com/teemtee/tmt/pull/3128 is merged
   - name: Enable epel to install beakerlib
     script: |
       # CS 10 and Fedora doesn't require epel

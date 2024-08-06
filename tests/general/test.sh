@@ -81,6 +81,9 @@ rlJournalStart
         fi
         test_playbooks=$(rolesGetTests "$role_path")
         rlLogInfo "Test playbooks: $test_playbooks"
+        if [ -z "$test_playbooks" ]; then
+            rlDie "No test playbooks found"
+        fi
         for test_playbook in $test_playbooks; do
             rolesHandleVault "$role_path" "$test_playbook"
         done

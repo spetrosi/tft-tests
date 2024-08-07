@@ -72,7 +72,7 @@ rlJournalStart
         else
             rlLogInfo "ANSIBLE_VER not defined - using system ansible if installed"
         fi
-        role_path=$(getRoleDir)
+        role_path=$(rolesGetRoleDir)
         test_playbooks=$(rolesGetTests "$role_path")
         rlLogInfo "Test playbooks: $test_playbooks"
         if [ -z "$test_playbooks" ]; then

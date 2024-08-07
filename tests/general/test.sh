@@ -86,9 +86,8 @@ rlJournalStart
         rlRun "cat $inventory"
     rlPhaseEnd
     rlPhaseStartTest
+        managed_nodes=$(rolesGetManagedNodes "$guests_yml")
         tests_path="$collection_path"/ansible_collections/fedora/linux_system_roles/tests/"$REPO_NAME"/
-        for test_playbook in $test_playbooks; do
-            rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$SKIP_TAGS"
-        done
+        rolesRunPlaybooksParallel "$tests_path" "$inventory" "$SKIP_TAGS" "$test_playbooks" "$managed_nodes"
     rlPhaseEnd
 rlJournalEnd

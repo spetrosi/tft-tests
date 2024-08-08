@@ -246,9 +246,11 @@ all:
     fi
     for managed_node in $managed_nodes; do
         ip_addr=$(yq ".$managed_node.\"primary-address\"" "$guests_yml")
-        echo "    $managed_node:" >> "$inventory"
-        echo "      ansible_host: $ip_addr" >> "$inventory"
-        echo "      ansible_ssh_extra_args: \"-o StrictHostKeyChecking=no\"" >> "$inventory"
+        {
+        echo "    $managed_node:"
+        echo "      ansible_host: $ip_addr"
+        echo "      ansible_ssh_extra_args: \"-o StrictHostKeyChecking=no\""
+        } >> "$inventory"
         if [ "$is_virtual" -eq 0 ]; then
             echo "      ansible_ssh_private_key_file: ${tmt_tree_provision}/control_node/id_ecdsa" >> "$inventory"
         fi

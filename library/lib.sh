@@ -149,7 +149,7 @@ rolesInstallDependencies() {
             rlLogInfo "Skipping installing dependencies from $req_file, this file doesn't exist"
         else
             rlRun "ansible-galaxy collection install -p $collection_path -vv -r $req_file"
-            if rolesIsAnsibleEnvVarSupported ANSIBLE_CONNECTION_PATH; then
+            if rolesIsAnsibleEnvVarSupported ANSIBLE_COLLECTION_PATH; then
                 rlRun "export ANSIBLE_COLLECTIONS_PATH=$collection_path"
             else
                 rlRun "export ANSIBLE_COLLECTIONS_PATHS=$collection_path"

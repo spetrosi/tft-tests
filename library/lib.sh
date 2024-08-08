@@ -140,18 +140,19 @@ rolesIsAnsibleCmdOptionSupported() {
 }
 
 rolesInstallDependencies() {
+    local role_path=$1
+    local collection_path=$2
     local coll_req_file="$1/meta/collection-requirements.yml"
     local coll_test_req_file="$1/tests/collection-requirements.yml"
-    collection_path=$(mktemp --directory -t collections-XXX)
     for req_file in $coll_req_file $coll_test_req_file; do
         if [ ! -f "$req_file" ]; then
             rlLogInfo "Skipping installing dependencies from $req_file, this file doesn't exist"
         else
-            rlRun "ansible-galaxy collection install -p $2 -vv -r $req_file"
+            rlRun "ansible-galaxy collection install -p $collection_path -vv -r $req_file"
             if rolesIsAnsibleEnvVarSupported ANSIBLE_CONNECTION_PATH; then
-                rlRun "export ANSIBLE_COLLECTIONS_PATH=$2"
+                rlRun "export ANSIBLE_COLLECTIONS_PATH=$collection_path"
             else
-                rlRun "export ANSIBLE_COLLECTIONS_PATHS=$2"
+                rlRun "export ANSIBLE_COLLECTIONS_PATHS=$collection_path"
             fi
             rlLogInfo "$req_file Dependencies were successfully installed"
         fi

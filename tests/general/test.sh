@@ -36,12 +36,7 @@ GITHUB_ORG="${GITHUB_ORG:-linux-system-roles}"
 #   Domain where to upload artifacts.
 # PYTHON_VERSION
 #   Python version to install ansible-core with (EL 8, 9, 10 only).
-if rlIsFedora || rlIsRHELLike ">7"; then
-    PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
-# hardcode for el7 because it won\t update
-else
-    PYTHON_VERSION=3
-fi
+PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 # SKIP_TAGS
 #   Ansible tags that must be skipped
 SKIP_TAGS="--skip-tags tests::nvme,tests::infiniband"

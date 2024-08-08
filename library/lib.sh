@@ -10,19 +10,22 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 rolesInstallAnsible() {
-    if rlIsRHELLike 7; then
-        # Hardcode to the only supported version on EL 7
-        ANSIBLE_VER=2.9
-    fi
-    if rlIsRHELLike 8 && [ "$ANSIBLE_VER" != "2.9" ]; then
+    # Hardcode to the only supported version on later ELs
+    if rlIsRHELLike 8 && [ "$ANSIBLE_VER" == "2.9" ]; then
+        PYTHON_VERSION=3.9
+    elif rlIsRHELLike 8 && [ "$ANSIBLE_VER" != "2.9" ]; then
         # CentOS-8 supports either 2.9 or 2.16
         ANSIBLE_VER=2.16
+    elif rlIsRHELLike 7; then
+        PYTHON_VERSION=3
+        ANSIBLE_VER=2.9
     fi
+
     if rlIsFedora || (rlIsRHELLike ">7" && [ "$ANSIBLE_VER" != "2.9" ]); then
         rlRun "dnf install python$PYTHON_VERSION-pip -y"
         rlRun "python$PYTHON_VERSION -m pip install ansible-core==$ANSIBLE_VER.* passlib"
     elif rlIsRHELLike 8; then
-        PYTHON_VERSION=3.9
+        # el8 ansible-2.9
         rlRun "dnf install python$PYTHON_VERSION -y"
         # selinux needed for delegate_to: localhost for file, copy, etc.
         # Providing passlib for password_hash module, see https://issues.redhat.com/browse/SYSROLES-81

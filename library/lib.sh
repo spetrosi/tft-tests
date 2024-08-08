@@ -336,18 +336,20 @@ rolesRunPlaybooksParallel() {
     local skip_tags=$3
     local test_playbooks=$4
     local managed_nodes=$5
+    local test_playbooks_arr
 
-    for test_playbook in $test_playbooks; do
-        while true; do
-            for managed_node in $managed_nodes; do
-                if ! pgrep -af "ansible-playbook" | grep -q "\-\-limit $managed_node"; then
-                    rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$skip_tags" "--limit $managed_node" &
-                    sleep 1
-                    break 2
-                fi
-            done
-            sleep 1
+    mapfile -t test_playbooks_arr <<< "$test_playbooks"
+    while [[ -n "${test_playbooks_arr[*]}" ]]; do
+        for managed_node in $managed_nodes; do
+            if ! pgrep -af "ansible-playbook" | grep -q "\-\-limit $managed_node"; then
+                test_playbook=${test_playbooks_arr[0]}
+                test_playbooks_arr=("${test_playbooks_arr[@]:1}") # Remove first element from array
+                rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$skip_tags" "--limit $managed_node" &
+                sleep 1
+                break
+            fi
         done
+        sleep 1
     done
     # Wait for the last test to finish
     while true; do

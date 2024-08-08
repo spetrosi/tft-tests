@@ -47,10 +47,10 @@ jobs:
           PR_NO: ${{ github.event.issue.number }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Checkout $TEST_ROLE repo
+      - name: Checkout ${{ env.TEST_ROLE }} repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/$TEST_ROLE
+          repository: ${{ github.repository_owner }}/${{ env.TEST_ROLE }}
           ref: main
 
       - name: Get memory
@@ -161,7 +161,7 @@ jobs:
           git_ref: ${{ needs.prepare_vars.outputs.head_sha }}
           pipeline_settings: '{ "type": "tmt-multihost" }'
           variables: "ANSIBLE_VER=${{ matrix.ansible_version }};\
-            REPO_NAME=$TEST_ROLE;\
+            REPO_NAME=${{ env.TEST_ROLE }};\
             GITHUB_ORG=${{ github.repository_owner }};\
             ARTIFACTS_DIR=${{ steps.set_vars.outputs.ARTIFACTS_DIR }};\
             ARTIFACTS_URL=${{ steps.set_vars.outputs.ARTIFACTS_URL }};\

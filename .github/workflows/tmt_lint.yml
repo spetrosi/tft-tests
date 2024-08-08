@@ -17,12 +17,6 @@ jobs:
   tmt_lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Install podman
-        run: |
-          set -euxo pipefail
-          sudo apt update
-          sudo apt install -y podman
-
       - name: Checkout repo
         uses: actions/checkout@v4
         with:

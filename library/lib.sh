@@ -353,7 +353,7 @@ rolesRunPlaybooksParallel() {
     done
     # Wait for the last test to finish
     while true; do
-        if ! pgrep -af "ansible-playbook" | grep -q "$tests_path$test_playbook"; then
+        if ! pgrep -af "ansible-playbook" | grep -q "$tests_path"; then
             break
         fi
         sleep 1

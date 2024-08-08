@@ -48,7 +48,7 @@ jobs:
       - name: Checkout postfix repo
         uses: actions/checkout@v4
         with:
-          repository: postfix
+          repository: ${{ github.repository_owner }}/postfix
           ref: main
 
       - name: Get memory

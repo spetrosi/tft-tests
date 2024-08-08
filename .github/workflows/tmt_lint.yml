@@ -26,12 +26,12 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
-          path: tft-tests
+          path: ${{ github.event.repository.name }}
 
       - name: Run tmt Lint
         run: >
           podman run -it
-          --volume ./tft-tests:/tft-tests:Z
-          --workdir /tft-tests
+          --volume ./${{ github.event.repository.name }}:/${{ github.event.repository.name }}:Z
+          --workdir /${{ github.event.repository.name }}
           --rm quay.io/testing-farm/tmt
           tmt lint

@@ -1,5 +1,5 @@
 ---
-name: Run plans for postfix role in Testing Farm
+name: Run plans for a single role
 on:
   issue_comment:
     types:
@@ -8,6 +8,8 @@ permissions:
   contents: read
   # This is required for the ability to create/update the Pull request status
   statuses: write
+env:
+  TEST_ROLE: postfix
 jobs:
   prepare_vars:
     name: Get info from role and PR to determine if and how to test
@@ -45,10 +47,10 @@ jobs:
           PR_NO: ${{ github.event.issue.number }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Checkout postfix repo
+      - name: Checkout $TEST_ROLE repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/postfix
+          repository: ${{ github.repository_owner }}/$TEST_ROLE
           ref: main
 
       - name: Get memory
@@ -155,11 +157,11 @@ jobs:
         uses: sclorg/testing-farm-as-github-action@v3
         if: contains(needs.prepare_vars.outputs.supported_platforms, matrix.platform)
         with:
-          git_url: ${{ github.event.repository.name }}
+          git_url: ${{ github.event.repository.html_url }}
           git_ref: ${{ needs.prepare_vars.outputs.head_sha }}
           pipeline_settings: '{ "type": "tmt-multihost" }'
           variables: "ANSIBLE_VER=${{ matrix.ansible_version }};\
-            REPO_NAME=postfix;\
+            REPO_NAME=$TEST_ROLE;\
             GITHUB_ORG=${{ github.repository_owner }};\
             ARTIFACTS_DIR=${{ steps.set_vars.outputs.ARTIFACTS_DIR }};\
             ARTIFACTS_URL=${{ steps.set_vars.outputs.ARTIFACTS_URL }};\

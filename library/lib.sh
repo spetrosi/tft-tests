@@ -339,7 +339,7 @@ rolesRunPlaybooksParallel() {
     local test_playbooks_arr
 
     mapfile -t test_playbooks_arr <<< "$test_playbooks"
-    while [[ -n "${test_playbooks_arr[*]}" ]]; do
+    while [ "${#test_playbooks_arr[*]}" -gt 0 ]; do
         for managed_node in $managed_nodes; do
             if ! pgrep -af "ansible-playbook" | grep -q "\--limit $managed_node\s"; then
                 test_playbook=${test_playbooks_arr[0]}

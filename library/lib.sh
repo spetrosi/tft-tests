@@ -54,11 +54,10 @@ rolesCloneRepo() {
 rolesGetRoleDir() {
     if [ "$TEST_LOCAL_CHANGES" == true ] || [ "$TEST_LOCAL_CHANGES" == True ]; then
         rlLog "Test from local changes"
-        echo "$TMT_TREE"
+        role_path="$TMT_TREE"
     else
         role_path=$(mktemp --directory -t "$REPO_NAME"-XXX)
         rolesCloneRepo "$role_path"
-        echo "$role_path"
     fi
 }
 
@@ -361,7 +360,7 @@ rolesGenerateTestDisks() {
     local provisionfmf
     local -i i=0
     local disk_provisioner_dir TARGETCLI_CMD disks disk file
-    role_path=$(rolesGetRoleDir)
+    rolesGetRoleDir
     provisionfmf="$role_path"/tests/provision.fmf
     if [ ! -f "$provisionfmf" ]; then
         rlRun "rm -rf ${role_path}"

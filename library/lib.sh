@@ -9,6 +9,11 @@
 #   library-prefix = library
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+rolesPrepTMTVars() {
+    tmt_tree_provision=${TMT_TREE%/*}/provision
+    guests_yml=${tmt_tree_provision}/guests.yaml
+}
+
 rolesInstallAnsible() {
     # Hardcode to the only supported version on later ELs
     if rlIsRHELLike 8 && [ "$ANSIBLE_VER" == "2.9" ]; then
@@ -227,6 +232,11 @@ rolesConvertToCollection() {
 --subrole-prefix $subrole_prefix"
 }
 
+rolesGetManagedNodes() {
+    local guests_yml=$1
+    grep -P -o '^managed_node(\d+)?' "$guests_yml" | sort
+}
+
 rolesPrepareInventoryVars() {
     local role_path=$1
     local tmt_tree_provision=$2
@@ -236,7 +246,7 @@ rolesPrepareInventoryVars() {
     # TMT_TOPOLOGY_ variables are not available in tmt try.
     # Reading topology from guests.yml for compatibility with tmt try
     is_virtual=$(rolesIsVirtual "$tmt_tree_provision")
-    managed_nodes=$(grep -P -o '^managed_node(\d+)?' "$guests_yml")
+    managed_nodes=$(rolesGetManagedNodes "$guests_yml")
     rlRun "python$PYTHON_VERSION -m pip install yq -q"
     if [ ! -f "$inventory" ]; then
         echo "---
@@ -300,18 +310,54 @@ rolesRunPlaybook() {
     local test_playbook=$2
     local inventory=$3
     local skip_tags=$4
+    local limit=$5
     local LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"
     local result=FAIL
+    local cmd log_msg
+    cmd="ansible-playbook -i $inventory $skip_tags $limit $tests_path$test_playbook -vv"
+    log_msg="Test $test_playbook with ANSIBLE-$ANSIBLE_VER on ${limit/--limit /}"
     # If LSR_TFT_DEBUG is true, print output to terminal
     if [ "$LSR_TFT_DEBUG" == true ] || [ "$LSR_TFT_DEBUG" == True ]; then
-        rlRun "ANSIBLE_LOG_PATH=$LOGFILE ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -vv && result=SUCCESS" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+        rlRun "ANSIBLE_LOG_PATH=$LOGFILE $cmd && result=SUCCESS" 0 "$log_msg"
     else
-        rlRun "ansible-playbook -i $inventory $skip_tags $tests_path$test_playbook -vv &> $LOGFILE && result=SUCCESS" 0 "Test $test_playbook with ANSIBLE-$ANSIBLE_VER"
+        rlRun "$cmd &> $LOGFILE && result=SUCCESS" 0 "$log_msg"
     fi
     logfile_name=$LOGFILE-$result.log
     mv "$LOGFILE" "$logfile_name"
     LOGFILE=$logfile_name
     rolesUploadLogs "$LOGFILE"
+}
+
+rolesRunPlaybooksParallel() {
+    # Run playbooks on managed nodes one by one
+    # Supports running against a single node too
+    local tests_path=$1
+    local inventory=$2
+    local skip_tags=$3
+    local test_playbooks=$4
+    local managed_nodes=$5
+    local test_playbooks_arr
+
+    mapfile -t test_playbooks_arr <<< "$test_playbooks"
+    while [ "${#test_playbooks_arr[*]}" -gt 0 ]; do
+        for managed_node in $managed_nodes; do
+            if ! pgrep -af "ansible-playbook" | grep -q "\--limit $managed_node\s"; then
+                test_playbook=${test_playbooks_arr[0]}
+                test_playbooks_arr=("${test_playbooks_arr[@]:1}") # Remove first element from array
+                rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$skip_tags" "--limit $managed_node" &
+                sleep 1
+                break
+            fi
+        done
+        sleep 1
+    done
+    # Wait for the last test to finish
+    while true; do
+        if ! pgrep -af "ansible-playbook" | grep -q "$tests_path"; then
+            break
+        fi
+        sleep 1
+    done
 }
 
 rolesCS8InstallPython() {

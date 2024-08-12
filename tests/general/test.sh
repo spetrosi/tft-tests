@@ -51,12 +51,10 @@ fi
 #   Env variables required by this test
 REQUIRED_VARS=("ANSIBLE_VER" "REPO_NAME")
 
-tmt_tree_provision=${TMT_TREE%/*}/provision
-guests_yml=${tmt_tree_provision}/guests.yaml
-
 rlJournalStart
     rlPhaseStartSetup
         rlRun "rlImport library"
+        rolesPrepTMTVars
         for required_var in "${REQUIRED_VARS[@]}"; do
             if [ -z "${!required_var}" ]; then
                 rlDie "This required variable is unset: $required_var "
@@ -82,13 +80,14 @@ rlJournalStart
         rolesInstallDependencies "$role_path" "$collection_path"
         rolesEnableCallbackPlugins "$collection_path"
         rolesConvertToCollection "$role_path" "$collection_path"
+        # tmt_tree_provision and guests_yml is defined in rolesPrepTMTVars
+        # shellcheck disable=SC2154
         inventory=$(rolesPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
         rlRun "cat $inventory"
     rlPhaseEnd
     rlPhaseStartTest
+        managed_nodes=$(rolesGetManagedNodes "$guests_yml")
         tests_path="$collection_path"/ansible_collections/fedora/linux_system_roles/tests/"$REPO_NAME"/
-        for test_playbook in $test_playbooks; do
-            rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$SKIP_TAGS"
-        done
+        rolesRunPlaybooksParallel "$tests_path" "$inventory" "$SKIP_TAGS" "$test_playbooks" "$managed_nodes"
     rlPhaseEnd
 rlJournalEnd

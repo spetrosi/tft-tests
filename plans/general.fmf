@@ -9,6 +9,12 @@ provision:
   - name: managed_node1
     role: managed_node
     connection: system
+  - name: managed_node2
+    role: managed_node
+    connection: system
+  - name: managed_node3
+    role: managed_node
+    connection: system
 environment:
     ANSIBLE_VER: 2.17
     REPO_NAME: ""

@@ -15,17 +15,18 @@ REQUIRED_VARS=("REPO_NAME")
 # PYTHON_VERSION
 #   Python version to install ansible-core with (EL 8, 9, 10 only).
 
-tmt_tree_provision=${TMT_TREE%/*}/provision
-
 rlJournalStart
     rlPhaseStartSetup
         rlRun "rlImport library"
+        rolesPrepTMTVars
         for required_var in "${REQUIRED_VARS[@]}"; do
             if [ -z "${!required_var}" ]; then
                 rlDie "This required variable is unset: $required_var "
             fi
         done
         rolesCS8InstallPython
+        # tmt_tree_provision is defined in rolesPrepTMTVars
+        # shellcheck disable=SC2154
         rolesDistributeSSHKeys "$tmt_tree_provision"
         rolesEnableHA
         rolesDisableNFV

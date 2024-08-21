@@ -92,7 +92,8 @@ rolesGetTests() {
     if [ -z "$test_playbooks" ]; then
         rlDie "No test playbooks found"
     fi
-    echo "$test_playbooks"
+    # Convert to a space-separated str, a format that users provide in env vars
+    echo "$test_playbooks" | tr '\n' ' '
 }
 
 # Handle Ansible Vault encrypted variables
@@ -242,17 +243,16 @@ rolesPrepareInventoryVars() {
     local tmt_tree_provision=$2
     local guests_yml=$3
     local inventory is_virtual  managed_nodes
-    inventory="$role_path/inventory.yml"
+    inventory=$(mktemp -p "$role_path" -t inventory-XXX.yml)
     # TMT_TOPOLOGY_ variables are not available in tmt try.
     # Reading topology from guests.yml for compatibility with tmt try
     is_virtual=$(rolesIsVirtual "$tmt_tree_provision")
     managed_nodes=$(rolesGetManagedNodes "$guests_yml")
     rlRun "python$PYTHON_VERSION -m pip install yq -q"
-    if [ ! -f "$inventory" ]; then
-        echo "---
+
+    echo "---
 all:
   hosts:" > "$inventory"
-    fi
     for managed_node in $managed_nodes; do
         ip_addr=$(yq ".$managed_node.\"primary-address\"" "$guests_yml")
         {
@@ -338,7 +338,7 @@ rolesRunPlaybooksParallel() {
     local managed_nodes=$5
     local test_playbooks_arr
 
-    mapfile -t test_playbooks_arr <<< "$test_playbooks"
+    read -ra test_playbooks_arr <<< "$test_playbooks"
     while [ "${#test_playbooks_arr[*]}" -gt 0 ]; do
         for managed_node in $managed_nodes; do
             if ! pgrep -af "ansible-playbook" | grep -q "\--limit $managed_node\s"; then

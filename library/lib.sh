@@ -213,6 +213,10 @@ rolesConvertToCollection() {
     fi
     # Remove role that was installed as a dependencie
     rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
+    # Remove performancecopilot vendored by metrics. It will be generated during a convertion to collection.
+    if [ "$REPO_NAME" = "metrics" ]; then
+        rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/vendor/github.com/performancecopilot/ansible-pcp"
+    fi
     rlRun "python$PYTHON_VERSION -m pip install ruamel-yaml"
     # Remove symlinks in tests/roles
     if [ -d "$role_path"/tests/roles ]; then

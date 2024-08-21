@@ -54,6 +54,7 @@ REQUIRED_VARS=("ANSIBLE_VER" "REPO_NAME")
 rlJournalStart
     rlPhaseStartSetup
         rlRun "rlImport library"
+        rolesLabBosRepoWorkaround
         rolesPrepTMTVars
         for required_var in "${REQUIRED_VARS[@]}"; do
             if [ -z "${!required_var}" ]; then

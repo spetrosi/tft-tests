@@ -14,6 +14,10 @@ rolesPrepTMTVars() {
     guests_yml=${tmt_tree_provision}/guests.yaml
 }
 
+rolesLabBosRepoWorkaround() {
+    sed -i 's|\.lab\.bos.|.devel.|g' /etc/yum.repos.d/*.repo
+}
+
 rolesInstallAnsible() {
     # Hardcode to the only supported version on later ELs
     if rlIsRHELLike 8 && [ "$ANSIBLE_VER" == "2.9" ]; then

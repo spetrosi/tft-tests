@@ -1,0 +1,9 @@
+summary: Keep system running in testing-farm
+framework: beakerlib
+test: ./reserve_system.sh
+duration: 8h
+tag: reserve_system
+require:
+    - beakerlib
+    # Required for yq
+    - jq

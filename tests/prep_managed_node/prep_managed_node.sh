@@ -19,16 +19,21 @@ rlJournalStart
     rlPhaseStartSetup
         rlRun "rlImport library"
         rolesLabBosRepoWorkaround
-        rolesPrepTMTVars
+        rolesPrepTestVars
         for required_var in "${REQUIRED_VARS[@]}"; do
             if [ -z "${!required_var}" ]; then
                 rlDie "This required variable is unset: $required_var "
             fi
         done
         rolesCS8InstallPython
-        # tmt_tree_provision is defined in rolesPrepTMTVars
+        rolesInstallYq
+        # tmt_tree_provision is defined in rolesPrepTestVars
         # shellcheck disable=SC2154
         rolesDistributeSSHKeys "$tmt_tree_provision"
+        # guests_yml is defined in rolesPrepTestVars
+        # shellcheck disable=SC2154
+        rolesSetHostname "$guests_yml"
+        rolesBuildEtcHosts "$guests_yml"
         rolesEnableHA
         rolesDisableNFV
         rolesGenerateTestDisks

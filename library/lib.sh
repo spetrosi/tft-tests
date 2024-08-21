@@ -9,9 +9,12 @@
 #   library-prefix = library
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-rolesPrepTMTVars() {
-    tmt_tree_provision=${TMT_TREE%/*}/provision
+rolesPrepTestVars() {
+    tmt_tree_parent=${TMT_TREE%/*}
+    tmt_plan=$(basename "$tmt_tree_parent")
+    tmt_tree_provision=$tmt_tree_parent/provision
     guests_yml=${tmt_tree_provision}/guests.yaml
+    declare -gA ANSIBLE_ENVS
 }
 
 rolesLabBosRepoWorkaround() {
@@ -43,6 +46,11 @@ rolesInstallAnsible() {
         # el7
         rlRun "yum install python$PYTHON_VERSION-pip ansible-$ANSIBLE_VER.* -y"
     fi
+}
+
+rolesInstallYq() {
+    rlRun "yum install python3-pip -y"
+    rlRun "python3 -m pip install yq"
 }
 
 rolesCloneRepo() {
@@ -96,7 +104,8 @@ rolesGetTests() {
     if [ -z "$test_playbooks" ]; then
         rlDie "No test playbooks found"
     fi
-    echo "$test_playbooks"
+    # Convert to a space-separated str, a format that users provide in env vars
+    echo "$test_playbooks" | xargs
 }
 
 # Handle Ansible Vault encrypted variables
@@ -120,7 +129,9 @@ rolesHandleVault() {
         fi
     fi
     rlLogInfo "Including vault variables in $playbook_file"
-    export ANSIBLE_VAULT_PASSWORD_FILE="$vault_pwd_file"
+    if [ -z "${ANSIBLE_ENVS[ANSIBLE_VAULT_PASSWORD_FILE]}" ]; then
+        ANSIBLE_ENVS[ANSIBLE_VAULT_PASSWORD_FILE]="$vault_pwd_file"
+    fi
     vault_play="---
 - hosts: all
   gather_facts: false
@@ -147,6 +158,15 @@ rolesIsAnsibleCmdOptionSupported() {
     $cmd --help | grep -q -e "$option"
 }
 
+rolesGetCollectionPath() {
+    collection_path=$(mktemp --directory -t collections-XXX)
+    if rolesIsAnsibleEnvVarSupported ANSIBLE_COLLECTIONS_PATH; then
+        ANSIBLE_ENVS[ANSIBLE_COLLECTIONS_PATH]="$collection_path"
+    else
+        ANSIBLE_ENVS[ANSIBLE_COLLECTIONS_PATHS]="$collection_path"
+    fi
+}
+
 rolesInstallDependencies() {
     local role_path=$1
     local collection_path=$2
@@ -155,15 +175,10 @@ rolesInstallDependencies() {
     for req_file in $coll_req_file $coll_test_req_file; do
         if [ ! -f "$req_file" ]; then
             rlLogInfo "Skipping installing dependencies from $req_file, this file doesn't exist"
-        else
-            rlRun "ansible-galaxy collection install -p $collection_path -vv -r $req_file"
-            if rolesIsAnsibleEnvVarSupported ANSIBLE_COLLECTION_PATH; then
-                rlRun "export ANSIBLE_COLLECTIONS_PATH=$collection_path"
-            else
-                rlRun "export ANSIBLE_COLLECTIONS_PATHS=$collection_path"
-            fi
-            rlLogInfo "$req_file Dependencies were successfully installed"
+            continue
         fi
+        rlRun "ansible-galaxy collection install -p $collection_path -vv -r $req_file"
+        rlLogInfo "$req_file Dependencies were successfully installed"
     done
 }
 
@@ -188,12 +203,12 @@ rolesEnableCallbackPlugins() {
         rlRun "cp $ansible_posix/$callback_path/{debug.py,profile_tasks.py} $collection_path/$callback_path/"
         rlRun "rm -rf $ansible_posix"
     fi
-    if ansible-config list | grep -q "name: ANSIBLE_CALLBACKS_ENABLED"; then
-        rlRun "export ANSIBLE_CALLBACKS_ENABLED=profile_tasks"
+    if rolesIsAnsibleEnvVarSupported ANSIBLE_CALLBACKS_ENABLED; then
+        ANSIBLE_ENVS[ANSIBLE_CALLBACKS_ENABLED]="profile_tasks"
     else
-        rlRun "export ANSIBLE_CALLBACK_WHITELIST=profile_tasks"
+        ANSIBLE_ENVS[ANSIBLE_CALLBACK_WHITELIST]="profile_tasks"
     fi
-    rlRun "export ANSIBLE_STDOUT_CALLBACK=debug"
+    ANSIBLE_ENVS[ANSIBLE_STDOUT_CALLBACK]="debug"
 }
 
 rolesConvertToCollection() {
@@ -215,9 +230,9 @@ rolesConvertToCollection() {
     if [ ! -f "$runtime" ]; then
         rlRun "curl -L -o $runtime $collection_script_url/lsr_role2collection/runtime.yml"
     fi
-    # Remove role that was installed as a dependencie
+    # Remove role that was installed as a dependency
     rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
-    # Remove performancecopilot vendored by metrics. It will be generated during a convertion to collection.
+    # Remove performancecopilot vendored by metrics. It will be generated during a conversion to collection.
     if [ "$REPO_NAME" = "metrics" ]; then
         rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/vendor/github.com/performancecopilot/ansible-pcp"
     fi
@@ -242,7 +257,17 @@ rolesConvertToCollection() {
 
 rolesGetManagedNodes() {
     local guests_yml=$1
-    grep -P -o '^managed_node(\d+)?' "$guests_yml" | sort
+    yq -r ". | keys[] | select(test(\"managed*\"))" "$guests_yml" | sort
+}
+
+rolesGetNodes() {
+    local guests_yml=$1
+    yq -r ". | keys[]" "$guests_yml" | sort
+}
+
+rolesGetControlNodeName() {
+    local guests_yml=$1
+    yq -r ". | keys[] | select(test(\"control*\"))" "$guests_yml"
 }
 
 rolesPrepareInventoryVars() {
@@ -250,26 +275,24 @@ rolesPrepareInventoryVars() {
     local tmt_tree_provision=$2
     local guests_yml=$3
     local inventory is_virtual  managed_nodes
-    inventory="$role_path/inventory.yml"
+    inventory=$(mktemp -p "$role_path" -t inventory-XXX.yml)
     # TMT_TOPOLOGY_ variables are not available in tmt try.
     # Reading topology from guests.yml for compatibility with tmt try
     is_virtual=$(rolesIsVirtual "$tmt_tree_provision")
     managed_nodes=$(rolesGetManagedNodes "$guests_yml")
-    rlRun "python$PYTHON_VERSION -m pip install yq -q"
-    if [ ! -f "$inventory" ]; then
-        echo "---
+    control_node_name=$(rolesGetControlNodeName "$guests_yml")
+    echo "---
 all:
   hosts:" > "$inventory"
-    fi
     for managed_node in $managed_nodes; do
-        ip_addr=$(yq ".$managed_node.\"primary-address\"" "$guests_yml")
+        ip_addr=$(yq ".\"$managed_node\".\"primary-address\"" "$guests_yml")
         {
         echo "    $managed_node:"
         echo "      ansible_host: $ip_addr"
         echo "      ansible_ssh_extra_args: \"-o StrictHostKeyChecking=no\""
         } >> "$inventory"
         if [ "$is_virtual" -eq 0 ]; then
-            echo "      ansible_ssh_private_key_file: ${tmt_tree_provision}/control_node/id_ecdsa" >> "$inventory"
+            echo "      ansible_ssh_private_key_file: ${tmt_tree_provision}/$control_node_name/id_ecdsa" >> "$inventory"
         fi
     done
     rlRun "echo $inventory"
@@ -286,8 +309,8 @@ rolesUploadLogs() {
     local logfile=$1
     local guests_yml=$2
     local id_rsa_path pr_substr os artifact_dirname target_dir
+    rlFileSubmit "$logfile"
     if [ -z "$LINUXSYSTEMROLES_SSH_KEY" ]; then
-        rlFileSubmit "$logfile"
         return
     fi
     id_rsa_path="$role_path/id_rsa"
@@ -296,7 +319,8 @@ rolesUploadLogs() {
         -e 's| -----END OPENSSH PRIVATE KEY-----|\n-----END OPENSSH PRIVATE KEY-----|' > "$id_rsa_path" # notsecret
     chmod 600 "$id_rsa_path"
     if [ -z "$ARTIFACTS_DIR" ]; then
-        os=$(yq '.control_node.facts."os-release-content".CENTOS_MANTISBT_PROJECT' "$guests_yml" | tr -d '""')
+        control_node_name=$(rolesGetControlNodeName "$guests_yml")
+        os=$(yq -r ".\"$control_node_name\".facts.distro" "$guests_yml" | sed 's/ /_/g')
         printf -v date '%(%Y%m%d-%H%M%S)T' -1
         if [ -z "$PR_NUM" ]; then
             pr_substr=_main
@@ -308,9 +332,20 @@ rolesUploadLogs() {
         ARTIFACTS_DIR="$target_dir"/"$artifact_dirname"
         ARTIFACTS_URL=https://dl.fedoraproject.org/pub/alt/linuxsystemroles/logs/$artifact_dirname/
     fi
-    ssh -i "$id_rsa_path" -o StrictHostKeyChecking=no "$LINUXSYSTEMROLES_USER"@"$LINUXSYSTEMROLES_DOMAIN" mkdir -p "$ARTIFACTS_DIR"
-    scp -i "$id_rsa_path" -o StrictHostKeyChecking=no "$logfile" "$LINUXSYSTEMROLES_USER"@"$LINUXSYSTEMROLES_DOMAIN":"$ARTIFACTS_DIR"/
+    rlRun "ssh -i $id_rsa_path -o StrictHostKeyChecking=no $LINUXSYSTEMROLES_USER@$LINUXSYSTEMROLES_DOMAIN mkdir -p $ARTIFACTS_DIR"
+    chmod +r "$guests_yml"
+    rlRun "scp -i $id_rsa_path -o StrictHostKeyChecking=no $logfile $guests_yml $LINUXSYSTEMROLES_USER@$LINUXSYSTEMROLES_DOMAIN:$ARTIFACTS_DIR/"
     rlLogInfo "Logs are uploaded at $ARTIFACTS_URL"
+    rlRun "rm $id_rsa_path"
+}
+
+rolesArrtoStr() {
+    # Convert associative array into a space separated key=value list
+    declare -n arr="$1"
+    for k in "${!arr[@]}"; do
+        printf "%s=%s " "$k" "${arr[$k]@Q}"
+    done
+    echo
 }
 
 rolesRunPlaybook() {
@@ -319,10 +354,10 @@ rolesRunPlaybook() {
     local inventory=$3
     local skip_tags=$4
     local limit=$5
-    local LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"
+    local LOGFILE=$6
     local result=FAIL
     local cmd log_msg
-    cmd="ansible-playbook -i $inventory $skip_tags $limit $tests_path$test_playbook -vv"
+    cmd="$(rolesArrtoStr ANSIBLE_ENVS) ansible-playbook -i $inventory $skip_tags $limit $tests_path$test_playbook -vv"
     log_msg="Test $test_playbook with ANSIBLE-$ANSIBLE_VER on ${limit/--limit /}"
     # If LSR_TFT_DEBUG is true, print output to terminal
     if [ "$LSR_TFT_DEBUG" == true ] || [ "$LSR_TFT_DEBUG" == True ]; then
@@ -333,7 +368,7 @@ rolesRunPlaybook() {
     logfile_name=$LOGFILE-$result.log
     mv "$LOGFILE" "$logfile_name"
     LOGFILE=$logfile_name
-    rolesUploadLogs "$LOGFILE"
+    rolesUploadLogs "$LOGFILE" "$guests_yml"
 }
 
 rolesRunPlaybooksParallel() {
@@ -346,13 +381,14 @@ rolesRunPlaybooksParallel() {
     local managed_nodes=$5
     local test_playbooks_arr
 
-    mapfile -t test_playbooks_arr <<< "$test_playbooks"
+    read -ra test_playbooks_arr <<< "$test_playbooks"
     while [ "${#test_playbooks_arr[*]}" -gt 0 ]; do
         for managed_node in $managed_nodes; do
             if ! pgrep -af "ansible-playbook" | grep -q "\--limit $managed_node\s"; then
                 test_playbook=${test_playbooks_arr[0]}
                 test_playbooks_arr=("${test_playbooks_arr[@]:1}") # Remove first element from array
-                rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$skip_tags" "--limit $managed_node" &
+                LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"-$tmt_plan
+                rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$skip_tags" "--limit $managed_node" "$LOGFILE" &
                 sleep 1
                 break
             fi
@@ -378,10 +414,29 @@ rolesCS8InstallPython() {
 rolesDistributeSSHKeys() {
     # name: Distribute SSH keys when provisioned with how=virtual
     local tmt_tree_provision=$1
-    local control_node_id_ecdsa_pub=$tmt_tree_provision/control_node/id_ecdsa.pub
+    local control_node_id_ecdsa_pub control_node_name
+    control_node_name=$(rolesGetControlNodeName "$guests_yml")
+    control_node_id_ecdsa_pub=$tmt_tree_provision/$control_node_name/id_ecdsa.pub
     if [ -f "$control_node_id_ecdsa_pub" ]; then
         rlRun "cat $control_node_id_ecdsa_pub >> ~/.ssh/authorized_keys"
     fi
+}
+
+rolesSetHostname() {
+    local guests_yml=$1
+    ip_addr=$(hostname -I | awk '{print $1}')
+    hostname=$(yq -r "to_entries | .[] | select(.value.\"primary-address\" == \"$ip_addr\") | .key" "$guests_yml")
+    rlRun "hostnamectl set-hostname $hostname"
+}
+
+rolesBuildEtcHosts() {
+    local guests_yml=$1
+    managed_nodes=$(rolesGetManagedNodes "$guests_yml")
+    for managed_node in $managed_nodes; do
+        managed_node_ip=$(yq -r ".\"$managed_node\".\"primary-address\"" "$guests_yml")
+        echo "$managed_node_ip" "$managed_node" >> /etc/hosts
+    done
+    rlRun "cat /etc/hosts"
 }
 
 rolesEnableHA() {
@@ -452,6 +507,16 @@ luns/ create /backstores/fileio/disk${i}"
 
     rlRun "rm -rf ${disk_provisioner_dir}"
     rlRun "rm -rf ${role_path}"
+}
+
+rolesMssqlHaUpdateInventory() {
+    local inventory=$1
+    declare -n node_types_arr="$2"
+    rlRun "cat $inventory"
+    for i in "${!node_types_arr[@]}"; do
+        rlRun "yq -yi '.all.hosts.\"$i\" += {\"mssql_ha_replica_type\": \"${node_types_arr[$i]}\"}' $inventory"
+    done
+    rlRun "cat $inventory"
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

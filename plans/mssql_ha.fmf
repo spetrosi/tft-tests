@@ -1,5 +1,5 @@
 summary: A general test for a system role
-tag: general
+tag: mssql
 provision:
   - name: control-node1
     role: control_node
@@ -7,20 +7,34 @@ provision:
     # `connection: system` is for `how: virtual` to make VMs get a real IP to configure ssh easily
     # This setting is ignored on artemis so we can keep it
     connection: system
+    # Provision all machines in the same AWS pool to ensure that they are in the same subnet
+    pool: aws-testing-farm-09
   - name: managed-node1
     role: managed_node
     connection: system
+    hardware:
+      memory: ">= 4096 MB"
+    pool: aws-testing-farm-09
   - name: managed-node2
     role: managed_node
     connection: system
+    hardware:
+      memory: ">= 4096 MB"
+    pool: aws-testing-farm-09
   - name: managed-node3
     role: managed_node
     connection: system
+    hardware:
+      memory: ">= 4096 MB"
+    pool: aws-testing-farm-09
+  - name: virtualip-node1
+    role: virtualip
+    connection: system
 environment:
     ANSIBLE_VER: 2.17
-    REPO_NAME: ""
     PYTHON_VERSION: 3.12
-    SYSTEM_ROLES_ONLY_TESTS: ""
+    REPO_NAME: mssql
+    SYSTEM_ROLES_ONLY_TESTS: "tests_configure_ha_cluster_external.yml tests_configure_ha_cluster_read_scale.yml"
     TEST_LOCAL_CHANGES: false
     PR_NUM: ""
     LINUXSYSTEMROLES_USER: ""
@@ -48,14 +62,14 @@ prepare:
       yum install epel-release yum-utils -y
       yum-config-manager --enable epel epel-debuginfo epel-source
 discover:
-  - name: Prepare managed node
+  - name: Prepare managed nodes
     how: fmf
     where: managed_node
     filter: tag:prep_managed_node
   - name: Run test playbooks from control_node
     how: fmf
     where: control_node
-    filter: tag:test_playbooks
+    filter: tag:mssql_ha
   # Uncomment this step for troubleshooting
   # This is required because currently testing-farm cli doesn't support running multi-node plans
   # You can set ID_RSA_PUB in the environment section above to your public key to distribute it to nodes

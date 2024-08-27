@@ -76,7 +76,9 @@ rlJournalStart
         for test_playbook in $test_playbooks; do
             rolesHandleVault "$role_path" "$test_playbook"
         done
-        collection_path=$(mktemp --directory -t collections-XXX)
+        rolesGetCollectionPath
+        # collection_path and guests_yml is defined in rolesGetCollectionPath
+        # shellcheck disable=SC2154
         rolesInstallDependencies "$role_path" "$collection_path"
         rolesEnableCallbackPlugins "$collection_path"
         rolesConvertToCollection "$role_path" "$collection_path"

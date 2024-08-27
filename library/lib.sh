@@ -146,6 +146,15 @@ rolesIsAnsibleCmdOptionSupported() {
     $cmd --help | grep -q -e "$option"
 }
 
+rolesGetCollectionPath() {
+    collection_path=$(mktemp --directory -t collections-XXX)
+    if rolesIsAnsibleEnvVarSupported ANSIBLE_COLLECTION_PATH; then
+        ANSIBLE_COLLECTIONS_PATH_ENV="ANSIBLE_COLLECTIONS_PATH=$collection_path"
+    else
+        ANSIBLE_COLLECTIONS_PATH_ENV="ANSIBLE_COLLECTIONS_PATHS=$collection_path"
+    fi
+}
+
 rolesInstallDependencies() {
     local role_path=$1
     local collection_path=$2
@@ -154,23 +163,10 @@ rolesInstallDependencies() {
     for req_file in $coll_req_file $coll_test_req_file; do
         if [ ! -f "$req_file" ]; then
             rlLogInfo "Skipping installing dependencies from $req_file, this file doesn't exist"
-        else
-            rlRun "ansible-galaxy collection install -p $collection_path -vv -r $req_file"
-            if rolesIsAnsibleEnvVarSupported ANSIBLE_COLLECTION_PATH; then
-                if [ -z "$ANSIBLE_COLLECTIONS_PATH_ENV" ]; then
-                    ANSIBLE_COLLECTIONS_PATH_ENV="ANSIBLE_COLLECTIONS_PATH=$collection_path"
-                else
-                    ANSIBLE_COLLECTIONS_PATH_ENV="$ANSIBLE_COLLECTIONS_PATH_ENV:$collection_path"
-                fi
-            else
-                if [ -z "$ANSIBLE_COLLECTIONS_PATH_ENV" ]; then
-                    ANSIBLE_COLLECTIONS_PATH_ENV="ANSIBLE_COLLECTIONS_PATHS=$collection_path"
-                else
-                    ANSIBLE_COLLECTIONS_PATH_ENV="$ANSIBLE_COLLECTIONS_PATH_ENV:$collection_path"
-                fi
-            fi
-            rlLogInfo "$req_file Dependencies were successfully installed"
+            continue
         fi
+        rlRun "ansible-galaxy collection install -p $collection_path -vv -r $req_file"
+        rlLogInfo "$req_file Dependencies were successfully installed"
     done
 }
 

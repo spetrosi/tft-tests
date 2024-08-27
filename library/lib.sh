@@ -278,10 +278,7 @@ rolesUploadLogs() {
     local logfile=$1
     local guests_yml=$2
     local id_rsa_path pr_substr os artifact_dirname target_dir
-    if [ -z "$LINUXSYSTEMROLES_SSH_KEY" ]; then
-        rlFileSubmit "$logfile"
-        return
-    fi
+    rlFileSubmit "$logfile"
     id_rsa_path="$role_path/id_rsa"
     echo "$LINUXSYSTEMROLES_SSH_KEY" | \
         sed -e 's|-----BEGIN OPENSSH PRIVATE KEY----- |-----BEGIN OPENSSH PRIVATE KEY-----\n|' \

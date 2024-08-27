@@ -10,7 +10,9 @@
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 rolesPrepTMTVars() {
-    tmt_tree_provision=${TMT_TREE%/*}/provision
+    tmt_tree_parent=${TMT_TREE%/*}
+    tmt_plan=$(basename "$tmt_tree_parent")
+    tmt_tree_provision=$tmt_tree_parent/provision
     guests_yml=${tmt_tree_provision}/guests.yaml
 }
 
@@ -316,7 +318,7 @@ rolesRunPlaybook() {
     local inventory=$3
     local skip_tags=$4
     local limit=$5
-    local LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"
+    local LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"-$tmt_plan
     local result=FAIL
     local cmd log_msg
     cmd="$ANSIBLE_COLLECTIONS_PATH_ENV ansible-playbook -i $inventory $skip_tags $limit $tests_path$test_playbook -vv"

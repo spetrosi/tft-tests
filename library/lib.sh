@@ -155,9 +155,17 @@ rolesInstallDependencies() {
         else
             rlRun "ansible-galaxy collection install -p $collection_path -vv -r $req_file"
             if rolesIsAnsibleEnvVarSupported ANSIBLE_COLLECTION_PATH; then
-                rlRun "export ANSIBLE_COLLECTIONS_PATH=$collection_path"
+                if [ -z "$ANSIBLE_COLLECTIONS_PATH_ENV" ]; then
+                    ANSIBLE_COLLECTIONS_PATH_ENV="ANSIBLE_COLLECTIONS_PATH=$collection_path"
+                else
+                    ANSIBLE_COLLECTIONS_PATH_ENV="$ANSIBLE_COLLECTIONS_PATH_ENV:$collection_path"
+                fi
             else
-                rlRun "export ANSIBLE_COLLECTIONS_PATHS=$collection_path"
+                if [ -z "$ANSIBLE_COLLECTIONS_PATH_ENV" ]; then
+                    ANSIBLE_COLLECTIONS_PATH_ENV="ANSIBLE_COLLECTIONS_PATHS=$collection_path"
+                else
+                    ANSIBLE_COLLECTIONS_PATH_ENV="$ANSIBLE_COLLECTIONS_PATH_ENV:$collection_path"
+                fi
             fi
             rlLogInfo "$req_file Dependencies were successfully installed"
         fi
@@ -311,7 +319,7 @@ rolesRunPlaybook() {
     local LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"
     local result=FAIL
     local cmd log_msg
-    cmd="ansible-playbook -i $inventory $skip_tags $limit $tests_path$test_playbook -vv"
+    cmd="$ANSIBLE_COLLECTIONS_PATH_ENV ansible-playbook -i $inventory $skip_tags $limit $tests_path$test_playbook -vv"
     log_msg="Test $test_playbook with ANSIBLE-$ANSIBLE_VER on ${limit/--limit /}"
     # If LSR_TFT_DEBUG is true, print output to terminal
     if [ "$LSR_TFT_DEBUG" == true ] || [ "$LSR_TFT_DEBUG" == True ]; then

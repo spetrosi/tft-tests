@@ -1,4 +1,5 @@
 summary: A general test for a system role
+tag: general
 provision:
   - name: control_node
     role: control_node

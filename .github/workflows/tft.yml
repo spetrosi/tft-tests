@@ -1,5 +1,5 @@
 ---
-name: Run plans for a single role
+name: Test our test plans
 on:
   issue_comment:
     types:
@@ -153,7 +153,7 @@ jobs:
           description: The role does not support this platform. Skipping.
           targetUrl: ""
 
-      - name: Run test in testing farm
+      - name: Run general plan against ${{ env.TEST_ROLE }}
         uses: sclorg/testing-farm-as-github-action@v3
         if: contains(needs.prepare_vars.outputs.supported_platforms, matrix.platform)
         with:
@@ -180,6 +180,37 @@ jobs:
           api_key: ${{ secrets.TF_API_KEY_RH }}
           update_pull_request_status: false
           tmt_hardware: '{ "memory": ">= ${{ needs.prepare_vars.outputs.memory }} MB" }'
+          tmt_plan_filter: "tag:general"
+
+      # Running separately to avoid using REPO_NAME=postfix in plans related to other roles
+      - name: Run mssql_ha plan against mssql
+        uses: sclorg/testing-farm-as-github-action@v3
+        if: contains(needs.prepare_vars.outputs.supported_platforms, matrix.platform)
+        with:
+          git_url: ${{ github.event.repository.html_url }}
+          git_ref: ${{ needs.prepare_vars.outputs.head_sha }}
+          pipeline_settings: '{ "type": "tmt-multihost" }'
+          environment_settings: '{ "provisioning": { "tags": { "BusinessUnit": "system_roles" } } }'
+          # Keeping ARTIFACTS_URL at the bottom makes the link in logs clickable
+          variables: "ANSIBLE_VER=${{ matrix.ansible_version }};\
+            REPO_NAME=mssql;\
+            GITHUB_ORG=${{ github.repository_owner }};\
+            ARTIFACTS_DIR=${{ steps.set_vars.outputs.ARTIFACTS_DIR }};\
+            TEST_LOCAL_CHANGES=false;\
+            LINUXSYSTEMROLES_USER=${{ vars.LINUXSYSTEMROLES_USER }};\
+            ARTIFACTS_URL=${{ steps.set_vars.outputs.ARTIFACTS_URL }}"
+          # Note that LINUXSYSTEMROLES_SSH_KEY must be single-line, TF doesn't read multi-line variables fine.
+          secrets: "LINUXSYSTEMROLES_DOMAIN=${{ secrets.LINUXSYSTEMROLES_DOMAIN }};\
+            LINUXSYSTEMROLES_SSH_KEY=${{ secrets.LINUXSYSTEMROLES_SSH_KEY }}"
+          compose: ${{ matrix.platform }}
+          # There are two blockers for using public ranch:
+          # 1. multihost is not supported in public https://github.com/teemtee/tmt/issues/2620
+          # 2. Security issue that leaks long secrets - Jira TFT-2698
+          tf_scope: private
+          api_key: ${{ secrets.TF_API_KEY_RH }}
+          update_pull_request_status: false
+          tmt_hardware: '{ "memory": ">= 4096 MB" }'
+          tmt_plan_filter: "tag:mssql"
 
       - name: Set final commit status
         uses: myrotvorets/set-commit-status-action@master

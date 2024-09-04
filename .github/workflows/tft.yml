@@ -114,11 +114,6 @@ jobs:
           - platform: CentOS-Stream-10
             ansible_version: 2.17
     runs-on: ubuntu-latest
-    env:
-      ARTIFACTS_DIR_NAME: "tf_${{ github.event.repository.name }}-${{ github.event.issue.number }}_\
-        ${{ matrix.platform }}-${{ matrix.ansible_version }}_\
-        ${{ needs.prepare_vars.outputs.datetime }}/artifacts"
-      ARTIFACT_TARGET_DIR: /srv/pub/alt/${{ vars.LINUXSYSTEMROLES_USER }}/logs
     steps:
       - name: Set variables with DATETIME and artifact location
         id: set_vars

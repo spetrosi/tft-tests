@@ -68,14 +68,14 @@ jobs:
         id: memory
         run: |
           provision_fmf=${{ matrix.test_role }}/tests/provision.fmf
-          if [ -d "$provision_fmf" ]; then
+          if [ -f "$provision_fmf" ]; then
             memory=$(grep -rPo '    m: \K(.*)' "$provision_fmf")
           fi
           if [ -z "$memory" ]; then
             memory=2048
           fi
-          echo "memory=$memory"
-          echo "memory=$memory" >> $GITHUB_OUTPUT
+          echo "${{ matrix.test_role }}_memory=$memory"
+          echo "${{ matrix.test_role }}_memory=$memory" >> $GITHUB_OUTPUT
       - name: Get supported platforms from the ${{ matrix.test_role }} repo
         id: supported_platforms
         run: |
@@ -100,8 +100,8 @@ jobs:
               supported_platforms+=" CentOS-Stream-$ver"
             fi
           done
-          echo "supported_platforms=$supported_platforms"
-          echo "supported_platforms=$supported_platforms" >> $GITHUB_OUTPUT
+          echo "${{ matrix.test_role }}_supported_platforms=$supported_platforms"
+          echo "${{ matrix.test_role }}_supported_platforms=$supported_platforms" >> $GITHUB_OUTPUT
 
   testing-farm:
     name: ${{ matrix.platform }}/ansible-${{ matrix.ansible_version }}

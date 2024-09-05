@@ -8,12 +8,9 @@ permissions:
   contents: read
   # This is required for the ability to create/update the Pull request status
   statuses: write
-env:
-  TEST_ROLE: postfix
 jobs:
-  prepare_vars:
-    name: Get info from role and PR to determine if and how to test
-    # The concurrency key is used to prevent multiple workflows from running at the same time
+  head_sha:
+    name: Get head sha of the tft-tests PR
     concurrency:
       # group name contains reponame-pr_num to allow simualteneous runs in different PRs
       group: testing-farm-${{ github.event.repository.name }}-${{ github.event.issue.number }}
@@ -27,9 +24,7 @@ jobs:
       || contains('systemroller', github.event.comment.user.login))
     runs-on: ubuntu-latest
     outputs:
-      supported_platforms: ${{ steps.supported_platforms.outputs.supported_platforms }}
       head_sha: ${{ steps.head_sha.outputs.head_sha }}
-      memory: ${{ steps.memory.outputs.memory }}
     steps:
       - name: Dump github context
         run:   echo "$GITHUB_CONTEXT"
@@ -37,39 +32,55 @@ jobs:
         env:
           GITHUB_CONTEXT: ${{ toJson(github) }}
 
-      - name: Get head sha of the PR
+      - name: Get head sha of the tft-tests PR
         id: head_sha
         run: |
           head_sha=$(gh api "repos/$REPO/pulls/$PR_NO" --jq '.head.sha')
+          echo "head_sha=$head_sha"
           echo "head_sha=$head_sha" >> $GITHUB_OUTPUT
         env:
           REPO: ${{ github.repository }}
           PR_NO: ${{ github.event.issue.number }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Checkout ${{ env.TEST_ROLE }} repo
+  prepare_vars:
+    name: Get info from test roles
+    runs-on: ubuntu-latest
+    outputs:
+      postfix_memory: ${{ steps.memory.outputs.postfix_memory }}
+      postfix_supported_platforms: ${{ steps.supported_platforms.outputs.postfix_supported_platforms }}
+      mssql_memory: ${{ steps.memory.outputs.mssql_memory }}
+      mssql_supported_platforms: ${{ steps.supported_platforms.outputs.mssql_supported_platforms }}
+    strategy:
+      matrix:
+        test_role:
+          - postfix
+          - mssql
+    steps:
+      - name: Checkout the ${{ matrix.test_role }} repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/${{ env.TEST_ROLE }}
+          repository: ${{ github.repository_owner }}/${{ matrix.test_role }}
           ref: main
+          path: ${{ matrix.test_role }}
 
-      - name: Get memory
+      - name: Get memory from the ${{ matrix.test_role }} repo
         id: memory
         run: |
-          if [ -d tests/provision.fmf ]; then
-            memory=$(grep -rPo '    m: \K(.*)' tests/provision.fmf)
+          provision_fmf=${{ matrix.test_role }}/tests/provision.fmf
+          if [ -d "$provision_fmf" ]; then
+            memory=$(grep -rPo '    m: \K(.*)' "$provision_fmf")
           fi
-          if [ -n "$memory" ]; then
-            echo "memory=$memory" >> $GITHUB_OUTPUT
-          else
-            echo "memory=2048" >> $GITHUB_OUTPUT
+          if [ -z "$memory" ]; then
+            memory=2048
           fi
-
-      - name: Get supported platforms
+          echo "memory=$memory"
+          echo "memory=$memory" >> $GITHUB_OUTPUT
+      - name: Get supported platforms from the ${{ matrix.test_role }} repo
         id: supported_platforms
         run: |
           supported_platforms=""
-          meta_main=meta/main.yml
+          meta_main=${{ matrix.test_role }}/meta/main.yml
           # All Fedora are supported, add latest Fedora versions to supported_platforms
           if yq '.galaxy_info.galaxy_tags[]' "$meta_main" | grep -qi fedora$; then
             supported_platforms+=" Fedora-39"
@@ -89,11 +100,14 @@ jobs:
               supported_platforms+=" CentOS-Stream-$ver"
             fi
           done
+          echo "supported_platforms=$supported_platforms"
           echo "supported_platforms=$supported_platforms" >> $GITHUB_OUTPUT
 
   testing-farm:
     name: ${{ matrix.platform }}/ansible-${{ matrix.ansible_version }}
-    needs: prepare_vars
+    needs:
+      - head_sha
+      - prepare_vars
     strategy:
       fail-fast: false
       matrix:
@@ -129,36 +143,41 @@ jobs:
           echo "ARTIFACTS_URL=$ARTIFACTS_URL" >> $GITHUB_OUTPUT
 
       - name: Set commit status as pending
-        if: contains(needs.prepare_vars.outputs.supported_platforms, matrix.platform)
+        if: |
+          contains(needs.prepare_vars.outputs.postfix_supported_platforms, matrix.platform)
+          || contains(needs.prepare_vars.outputs.mssql_supported_platforms, matrix.platform)
         uses: myrotvorets/set-commit-status-action@master
         with:
-          sha: ${{ needs.prepare_vars.outputs.head_sha }}
+          sha: ${{ needs.head_sha.outputs.head_sha }}
           status: pending
           context: ${{ matrix.platform }}|ansible-${{ matrix.ansible_version }}
           description: Test started
           targetUrl: ""
 
       - name: Set commit status as success with a description that platform is skipped
-        if: "!contains(needs.prepare_vars.outputs.supported_platforms, matrix.platform)"
+        if: |
+          !contains(needs.prepare_vars.outputs.postfix_supported_platforms, matrix.platform)
+          && !contains(needs.prepare_vars.outputs.mssql_supported_platforms, matrix.platform)
         uses: myrotvorets/set-commit-status-action@master
         with:
-          sha: ${{ needs.prepare_vars.outputs.head_sha }}
+          sha: ${{ needs.head_sha.outputs.head_sha }}
           status: success
           context: ${{ matrix.platform }}|ansible-${{ matrix.ansible_version }}
           description: The role does not support this platform. Skipping.
           targetUrl: ""
 
-      - name: Run general plan against ${{ env.TEST_ROLE }}
+      - name: Run general plan against postfix
         uses: sclorg/testing-farm-as-github-action@v3
-        if: contains(needs.prepare_vars.outputs.supported_platforms, matrix.platform)
+        continue-on-error: true
+        if: contains(needs.prepare_vars.outputs.postfix_supported_platforms, matrix.platform)
         with:
           git_url: ${{ github.event.repository.html_url }}
-          git_ref: ${{ needs.prepare_vars.outputs.head_sha }}
+          git_ref: ${{ needs.head_sha.outputs.head_sha }}
           pipeline_settings: '{ "type": "tmt-multihost" }'
           environment_settings: '{ "provisioning": { "tags": { "BusinessUnit": "system_roles" } } }'
           # Keeping ARTIFACTS_URL at the bottom makes the link in logs clickable
           variables: "ANSIBLE_VER=${{ matrix.ansible_version }};\
-            REPO_NAME=${{ env.TEST_ROLE }};\
+            REPO_NAME=postfix;\
             GITHUB_ORG=${{ github.repository_owner }};\
             ARTIFACTS_DIR=${{ steps.set_vars.outputs.ARTIFACTS_DIR }};\
             TEST_LOCAL_CHANGES=false;\
@@ -174,16 +193,16 @@ jobs:
           tf_scope: private
           api_key: ${{ secrets.TF_API_KEY_RH }}
           update_pull_request_status: false
-          tmt_hardware: '{ "memory": ">= ${{ needs.prepare_vars.outputs.memory }} MB" }'
+          tmt_hardware: '{ "memory": ">= ${{ needs.prepare_vars.outputs.postfix_memory }} MB" }'
           tmt_plan_filter: "tag:general"
 
       # Running separately to avoid using REPO_NAME=postfix in plans related to other roles
       - name: Run mssql_ha plan against mssql
         uses: sclorg/testing-farm-as-github-action@v3
-        if: contains(needs.prepare_vars.outputs.supported_platforms, matrix.platform)
+        if: contains(needs.prepare_vars.outputs.mssql_supported_platforms, matrix.platform)
         with:
           git_url: ${{ github.event.repository.html_url }}
-          git_ref: ${{ needs.prepare_vars.outputs.head_sha }}
+          git_ref: ${{ needs.head_sha.outputs.head_sha }}
           pipeline_settings: '{ "type": "tmt-multihost" }'
           environment_settings: '{ "provisioning": { "tags": { "BusinessUnit": "system_roles" } } }'
           # Keeping ARTIFACTS_URL at the bottom makes the link in logs clickable
@@ -204,14 +223,17 @@ jobs:
           tf_scope: private
           api_key: ${{ secrets.TF_API_KEY_RH }}
           update_pull_request_status: false
-          tmt_hardware: '{ "memory": ">= 4096 MB" }'
+          tmt_hardware: '{ "memory": ">= ${{ needs.prepare_vars.outputs.mssql_memory }} MB" }'
           tmt_plan_filter: "tag:mssql"
 
       - name: Set final commit status
         uses: myrotvorets/set-commit-status-action@master
-        if: always() && contains(needs.prepare_vars.outputs.supported_platforms, matrix.platform)
+        if: |
+          always()
+          && (contains(needs.prepare_vars.outputs.postfix_supported_platforms, matrix.platform)
+          || contains(needs.prepare_vars.outputs.mssql_supported_platforms, matrix.platform))
         with:
-          sha: ${{ needs.prepare_vars.outputs.head_sha }}
+          sha: ${{ needs.head_sha.outputs.head_sha }}
           status: ${{ job.status }}
           context: ${{ matrix.platform }}|ansible-${{ matrix.ansible_version }}
           description: Test finished

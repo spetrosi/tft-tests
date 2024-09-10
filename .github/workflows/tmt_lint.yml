@@ -27,5 +27,5 @@ jobs:
           podman run -it
           --volume ./${{ github.event.repository.name }}:/${{ github.event.repository.name }}:Z
           --workdir /${{ github.event.repository.name }}
-          --rm quay.io/testing-farm/tmt
+          --rm quay.io/teemtee/tmt
           tmt lint

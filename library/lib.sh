@@ -357,7 +357,11 @@ rolesRunPlaybook() {
     local LOGFILE=$6
     local result=FAIL
     local cmd log_msg
-    cmd="$(rolesArrtoStr ANSIBLE_ENVS) ansible-playbook -i $inventory $skip_tags $limit $tests_path$test_playbook -vv"
+    local ans_debug=""
+    if [ "${GET_PYTHON_MODULES:-}" = true ]; then
+        ans_debug="ANSIBLE_DEBUG=true"
+    fi
+    cmd="$(rolesArrtoStr ANSIBLE_ENVS) $ans_debug ansible-playbook -i $inventory $skip_tags $limit $tests_path$test_playbook -vv"
     log_msg="Test $test_playbook with ANSIBLE-$ANSIBLE_VER on ${limit/--limit /}"
     # If LSR_TFT_DEBUG is true, print output to terminal
     if [ "$LSR_TFT_DEBUG" == true ] || [ "$LSR_TFT_DEBUG" == True ]; then
@@ -369,6 +373,13 @@ rolesRunPlaybook() {
     mv "$LOGFILE" "$logfile_name"
     LOGFILE=$logfile_name
     rolesUploadLogs "$LOGFILE" "$guests_yml"
+    if [ "${GET_PYTHON_MODULES:-}" = true ]; then
+        cmd="$(rolesArrtoStr ANSIBLE_ENVS) ansible-playbook -i $inventory $skip_tags $limit process_python_modules_packages.yml -vv"
+        local packages="$LOGFILE.packages"
+        rlRun "$cmd -e packages_file=$packages -e logfile=$LOGFILE &> $LOGFILE.modules" 0 "process python modules"
+        rolesUploadLogs "$LOGFILE.modules" "$guests_yml"
+        rolesUploadLogs "$packages" "$guests_yml"
+    fi
 }
 
 rolesRunPlaybooksParallel() {
@@ -517,6 +528,19 @@ rolesMssqlHaUpdateInventory() {
         rlRun "yq -yi '.all.hosts.\"$i\" += {\"mssql_ha_replica_type\": \"${node_types_arr[$i]}\"}' $inventory"
     done
     rlRun "cat $inventory"
+}
+
+# prepare test playbooks for gathering information about python
+# module usage
+rolesSetupGetPythonModules() {
+    local tests_dir test_pb
+    tests_dir="$1"; shift
+    for test_pb in "$@"; do
+        cp "$tests_dir$test_pb" "$tests_dir$test_pb.orig"
+        sed -e '/^  hosts:/a\
+  environment:\
+    PYTHONVERBOSE: "1"' -i "$tests_dir$test_pb"
+    done
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

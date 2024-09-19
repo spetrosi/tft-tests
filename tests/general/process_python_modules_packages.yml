@@ -1,0 +1,47 @@
+---
+- name: Get python modules from log file and create packages file
+  hosts: all
+  gather_facts: false
+  vars:
+    logfile: ""
+    packages_file: packages.txt
+  tasks:
+    - name: Get list of modules
+      set_fact:
+        modules: "{{ lookup('file', logfile).splitlines() | select('match', __pat) |
+          map('regex_replace', __pat, '\\1') | select | union(modules | d([])) | unique | list }}"
+      vars:
+        __pat: "^>>># /[^ ]+ matches (/[^ ]+?[.]py).*$"
+      changed_when: false
+      delegate_to: localhost
+
+    - name: Copy modules file to host
+      copy:
+        content: "{{ modules | sort | join(__nl) ~ __nl }}"
+        dest: /tmp/modules.txt
+        mode: "0600"
+      vars:
+        __nl: "\n"
+
+    - name: Get unique list of packages that provide modules in modules.txt
+      shell: |
+        declare -A packages
+        while read -r file; do
+          if [ -z "$file" ]; then
+            continue  # probably extra trailing newline
+          elif pkg="$(rpm -qf "$file" --queryformat '%{name}-%{version}-%{release}\n')"; then
+            packages["$pkg"]="$pkg"
+          else
+            echo "ERROR: file $file does not belong to any package"
+          fi
+        done < /tmp/modules.txt
+        for pkg in "${packages[@]}"; do
+          echo "$pkg"
+        done | sort > /tmp/packages.txt
+      changed_when: false
+
+    - name: Copy packages file back to localhost
+      fetch:
+        src: /tmp/packages.txt
+        dest: "{{ packages_file }}"
+        flat: true

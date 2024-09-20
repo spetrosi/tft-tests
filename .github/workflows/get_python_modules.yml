@@ -9,12 +9,11 @@ permissions:
   # This is required for the ability to create/update the Pull request status
   statuses: write
 env:
-  TEST_ROLES: >-
-    ["ad_integration", "bootloader", "certificate", "cockpit", "crypto_policies", "fapolicyd",
-     "firewall", "gfs2", "ha_cluster", "journald", "kdump", "kernel_settings", "keylime_server",
-     "logging", "metrics", "nbde_client", "nbde_server", "network", "podman", "postfix",
-     "postgresql", "rhc", "selinux", "snapshot", "ssh", "sshd", "storage", "sudo", "systemd",
-     "timesync", "tlog", "vpn"]
+  TEST_ROLES: '[\"ad_integration\",\"bootloader\",\"certificate\",\"cockpit\",\"crypto_policies\",\"fapolicyd\",\
+     \"firewall\",\"gfs2\",\"ha_cluster\",\"journald\",\"kdump\",\"kernel_settings\",\"keylime_server\",\
+     \"logging\",\"metrics\",\"nbde_client\",\"nbde_server\",\"network\",\"podman\",\"postfix\",\
+     \"postgresql\",\"rhc\",\"selinux\",\"snapshot\",\"ssh\",\"sshd\",\"storage\",\"sudo\",\"systemd\",\
+     \"timesync\",\"tlog\",\"vpn\"]'
 jobs:
   prepare_run_vars:
     name: Get head sha of the tft-tests PR
@@ -54,7 +53,7 @@ jobs:
       - name: Set variables used by all tests
         id: set_vars
         run: |
-          echo "TEST_ROLES=${{ toJSON(fromJSON(env.TEST_ROLES)) }}" >> $GITHUB_OUTPUT
+          echo "TEST_ROLES=$TEST_ROLES" >> $GITHUB_OUTPUT
 
   prepare_role_vars:
     name: Get info from test roles

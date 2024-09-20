@@ -9,11 +9,11 @@ permissions:
   # This is required for the ability to create/update the Pull request status
   statuses: write
 env:
-  TEST_ROLES: '[\"ad_integration\",\"bootloader\",\"certificate\",\"cockpit\",\"crypto_policies\",\"fapolicyd\",\
+  TEST_ROLES: "[\"ad_integration\",\"bootloader\",\"certificate\",\"cockpit\",\"crypto_policies\",\"fapolicyd\",\
      \"firewall\",\"gfs2\",\"ha_cluster\",\"journald\",\"kdump\",\"kernel_settings\",\"keylime_server\",\
      \"logging\",\"metrics\",\"nbde_client\",\"nbde_server\",\"network\",\"podman\",\"postfix\",\
      \"postgresql\",\"rhc\",\"selinux\",\"snapshot\",\"ssh\",\"sshd\",\"storage\",\"sudo\",\"systemd\",\
-     \"timesync\",\"tlog\",\"vpn\"]'
+     \"timesync\",\"tlog\",\"vpn\"]"
 jobs:
   prepare_run_vars:
     name: Get head sha of the tft-tests PR

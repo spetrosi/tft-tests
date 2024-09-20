@@ -1,0 +1,318 @@
+---
+name: Run GET_PYTHON_MODULES against all roles
+on:
+  issue_comment:
+    types:
+      - created
+permissions:
+  contents: read
+  # This is required for the ability to create/update the Pull request status
+  statuses: write
+jobs:
+  prepare_run_vars:
+    name: Get head sha of the tft-tests PR
+    concurrency:
+      # group name contains reponame-pr_num to allow simualteneous runs in different PRs
+      group: testing-farm-${{ github.event.repository.name }}-${{ github.event.issue.number }}
+      cancel-in-progress: true
+    # Let's schedule tests only on user request. NOT automatically.
+    # Only repository owner or member can schedule tests
+    if: |
+      github.event.issue.pull_request
+      && contains(github.event.comment.body, '[get_python_modules]')
+      && (contains(fromJson('["OWNER", "MEMBER", "COLLABORATOR", "CONTRIBUTOR"]'), github.event.comment.author_association)
+      || contains('systemroller', github.event.comment.user.login))
+    runs-on: ubuntu-latest
+    outputs:
+      head_sha: ${{ steps.head_sha.outputs.head_sha }}
+      ARTIFACTS_DIR: ${{ needs.prepare_run_vars.outputs.ARTIFACTS_DIR }}
+      ARTIFACTS_URL: ${{ needs.prepare_run_vars.outputs.ARTIFACTS_URL }}
+    steps:
+      - name: Dump github context
+        run:   echo "$GITHUB_CONTEXT"
+        shell: bash
+        env:
+          GITHUB_CONTEXT: ${{ toJson(github) }}
+
+      - name: Get head sha of the tft-tests PR
+        id: head_sha
+        run: |
+          head_sha=$(gh api "repos/$REPO/pulls/$PR_NO" --jq '.head.sha')
+          echo "head_sha=$head_sha"
+          echo "head_sha=$head_sha" >> $GITHUB_OUTPUT
+        env:
+          REPO: ${{ github.repository }}
+          PR_NO: ${{ github.event.issue.number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set variables with DATETIME and artifact location
+        id: set_vars
+        run: |
+          printf -v DATETIME '%(%Y%m%d-%H%M%S)T' -1
+          ARTIFACTS_DIR_NAME="tf_${{ github.event.repository.name }}-${{ github.event.issue.number }}_\
+          ${{ matrix.platform }}-${{ matrix.ansible_version }}_$DATETIME/artifacts"
+          ARTIFACTS_TARGET_DIR=/srv/pub/alt/${{ vars.LINUXSYSTEMROLES_USER }}/logs
+          ARTIFACTS_DIR=$ARTIFACTS_TARGET_DIR/$ARTIFACTS_DIR_NAME
+          ARTIFACTS_URL=https://dl.fedoraproject.org/pub/alt/${{ vars.LINUXSYSTEMROLES_USER }}/logs/$ARTIFACTS_DIR_NAME
+          echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_OUTPUT
+          echo "ARTIFACTS_URL=$ARTIFACTS_URL" >> $GITHUB_OUTPUT
+
+  prepare_role_vars:
+    name: Get info from test roles
+    runs-on: ubuntu-latest
+    outputs:
+      postfix_memory: ${{ steps.memory.outputs.postfix_memory }}
+      postfix_supported_platforms: ${{ steps.supported_platforms.outputs.postfix_supported_platforms }}
+      selinux_memory: ${{ steps.memory.outputs.selinux_memory }}
+      selinux_supported_platforms: ${{ steps.supported_platforms.outputs.selinux_supported_platforms }}
+      timesync_memory: ${{ steps.memory.outputs.timesync_memory }}
+      timesync_supported_platforms: ${{ steps.supported_platforms.outputs.timesync_supported_platforms }}
+      kdump_memory: ${{ steps.memory.outputs.kdump_memory }}
+      kdump_supported_platforms: ${{ steps.supported_platforms.outputs.kdump_supported_platforms }}
+      network_memory: ${{ steps.memory.outputs.network_memory }}
+      network_supported_platforms: ${{ steps.supported_platforms.outputs.network_supported_platforms }}
+      storage_memory: ${{ steps.memory.outputs.storage_memory }}
+      storage_supported_platforms: ${{ steps.supported_platforms.outputs.storage_supported_platforms }}
+      metrics_memory: ${{ steps.memory.outputs.metrics_memory }}
+      metrics_supported_platforms: ${{ steps.supported_platforms.outputs.metrics_supported_platforms }}
+      tlog_memory: ${{ steps.memory.outputs.tlog_memory }}
+      tlog_supported_platforms: ${{ steps.supported_platforms.outputs.tlog_supported_platforms }}
+      kernel_settings_memory: ${{ steps.memory.outputs.kernel_settings_memory }}
+      kernel_settings_supported_platforms: ${{ steps.supported_platforms.outputs.kernel_settings_supported_platforms }}
+      logging_memory: ${{ steps.memory.outputs.logging_memory }}
+      logging_supported_platforms: ${{ steps.supported_platforms.outputs.logging_supported_platforms }}
+      nbde_server_memory: ${{ steps.memory.outputs.nbde_server_memory }}
+      nbde_server_supported_platforms: ${{ steps.supported_platforms.outputs.nbde_server_supported_platforms }}
+      nbde_client_memory: ${{ steps.memory.outputs.nbde_client_memory }}
+      nbde_client_supported_platforms: ${{ steps.supported_platforms.outputs.nbde_client_supported_platforms }}
+      certificate_memory: ${{ steps.memory.outputs.certificate_memory }}
+      certificate_supported_platforms: ${{ steps.supported_platforms.outputs.certificate_supported_platforms }}
+      crypto_policies_memory: ${{ steps.memory.outputs.crypto_policies_memory }}
+      crypto_policies_supported_platforms: ${{ steps.supported_platforms.outputs.crypto_policies_supported_platforms }}
+      sshd_memory: ${{ steps.memory.outputs.sshd_memory }}
+      sshd_supported_platforms: ${{ steps.supported_platforms.outputs.sshd_supported_platforms }}
+      ssh_memory: ${{ steps.memory.outputs.ssh_memory }}
+      ssh_supported_platforms: ${{ steps.supported_platforms.outputs.ssh_supported_platforms }}
+      ha_cluster_memory: ${{ steps.memory.outputs.ha_cluster_memory }}
+      ha_cluster_supported_platforms: ${{ steps.supported_platforms.outputs.ha_cluster_supported_platforms }}
+      vpn_memory: ${{ steps.memory.outputs.vpn_memory }}
+      vpn_supported_platforms: ${{ steps.supported_platforms.outputs.vpn_supported_platforms }}
+      firewall_memory: ${{ steps.memory.outputs.firewall_memory }}
+      firewall_supported_platforms: ${{ steps.supported_platforms.outputs.firewall_supported_platforms }}
+      cockpit_memory: ${{ steps.memory.outputs.cockpit_memory }}
+      cockpit_supported_platforms: ${{ steps.supported_platforms.outputs.cockpit_supported_platforms }}
+      podman_memory: ${{ steps.memory.outputs.podman_memory }}
+      podman_supported_platforms: ${{ steps.supported_platforms.outputs.podman_supported_platforms }}
+      ad_integration_memory: ${{ steps.memory.outputs.ad_integration_memory }}
+      ad_integration_supported_platforms: ${{ steps.supported_platforms.outputs.ad_integration_supported_platforms }}
+      rhc_memory: ${{ steps.memory.outputs.rhc_memory }}
+      rhc_supported_platforms: ${{ steps.supported_platforms.outputs.rhc_supported_platforms }}
+      journald_memory: ${{ steps.memory.outputs.journald_memory }}
+      journald_supported_platforms: ${{ steps.supported_platforms.outputs.journald_supported_platforms }}
+      postgresql_memory: ${{ steps.memory.outputs.postgresql_memory }}
+      postgresql_supported_platforms: ${{ steps.supported_platforms.outputs.postgresql_supported_platforms }}
+      systemd_memory: ${{ steps.memory.outputs.systemd_memory }}
+      systemd_supported_platforms: ${{ steps.supported_platforms.outputs.systemd_supported_platforms }}
+      keylime_server_memory: ${{ steps.memory.outputs.keylime_server_memory }}
+      keylime_server_supported_platforms: ${{ steps.supported_platforms.outputs.keylime_server_supported_platforms }}
+      fapolicyd_memory: ${{ steps.memory.outputs.fapolicyd_memory }}
+      fapolicyd_supported_platforms: ${{ steps.supported_platforms.outputs.fapolicyd_supported_platforms }}
+      bootloader_memory: ${{ steps.memory.outputs.bootloader_memory }}
+      bootloader_supported_platforms: ${{ steps.supported_platforms.outputs.bootloader_supported_platforms }}
+      snapshot_memory: ${{ steps.memory.outputs.snapshot_memory }}
+      snapshot_supported_platforms: ${{ steps.supported_platforms.outputs.snapshot_supported_platforms }}
+      gfs2_memory: ${{ steps.memory.outputs.gfs2_memory }}
+      gfs2_supported_platforms: ${{ steps.supported_platforms.outputs.gfs2_supported_platforms }}
+      sudo_memory: ${{ steps.memory.outputs.sudo_memory }}
+      sudo_supported_platforms: ${{ steps.supported_platforms.outputs.sudo_supported_platforms }}
+    strategy:
+      matrix:
+        test_role:
+          - postfix
+          - selinux
+          - timesync
+          - kdump
+          - network
+          - storage
+          - metrics
+          - tlog
+          - kernel_settings
+          - logging
+          - nbde_server
+          - nbde_client
+          - certificate
+          - crypto_policies
+          - sshd
+          - ssh
+          - ha_cluster
+          - vpn
+          - firewall
+          - cockpit
+          - podman
+          - ad_integration
+          - rhc
+          - journald
+          - postgresql
+          - systemd
+          - keylime_server
+          - fapolicyd
+          - bootloader
+          - snapshot
+          - gfs2
+          - sudo
+    steps:
+      - name: Checkout the ${{ matrix.test_role }} repo
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ matrix.test_role == 'sshd' && 'willshersystems' || 'linux-system-roles' }}/${{ matrix.test_role == 'sshd' && 'ansible-sshd' || matrix.test_role }}
+          ref: main
+          path: ${{ matrix.test_role }}
+
+      - name: Get memory from the ${{ matrix.test_role }} repo
+        id: memory
+        run: |
+          provision_fmf=${{ matrix.test_role }}/tests/provision.fmf
+          if [ -f "$provision_fmf" ]; then
+            memory=$(grep -rPo '    m: \K(.*)' "$provision_fmf" || :)
+          fi
+          if [ -z "$memory" ]; then
+            memory=2048
+          fi
+          echo "${{ matrix.test_role }}_memory=$memory"
+          echo "${{ matrix.test_role }}_memory=$memory" >> $GITHUB_OUTPUT
+      - name: Get supported platforms from the ${{ matrix.test_role }} repo
+        id: supported_platforms
+        run: |
+          supported_platforms=""
+          meta_main=${{ matrix.test_role }}/meta/main.yml
+          # All Fedora are supported, add latest Fedora versions to supported_platforms
+          if yq '.galaxy_info.galaxy_tags[]' "$meta_main" | grep -qi fedora$; then
+            supported_platforms+=" Fedora-39"
+            supported_platforms+=" Fedora-40"
+          fi
+          # Specific Fedora versions supported
+          if yq '.galaxy_info.galaxy_tags[]' "$meta_main" | grep -qiP 'fedora\d+$'; then
+            for fedora_ver in $(yq '.galaxy_info.galaxy_tags[]' "$meta_main" | grep -iPo 'fedora\K(\d+$)'); do
+              supported_platforms+=" Fedora-$fedora_ver"
+            done
+          fi
+          if yq '.galaxy_info.galaxy_tags[]' "$meta_main" | grep -qi el7; then
+            supported_platforms+=" CentOS-7-latest"
+          fi
+          for ver in 8 9 10; do
+            if yq '.galaxy_info.galaxy_tags[]' "$meta_main" | grep -qi el"$ver"; then
+              supported_platforms+=" CentOS-Stream-$ver"
+            fi
+          done
+          echo "${{ matrix.test_role }}_supported_platforms=$supported_platforms"
+          echo "${{ matrix.test_role }}_supported_platforms=$supported_platforms" >> $GITHUB_OUTPUT
+
+  testing-farm:
+    name: ${{ matrix.platform }}/ansible-${{ matrix.ansible_version }}
+    needs:
+      - prepare_run_vars
+      - prepare_role_vars
+    strategy:
+      fail-fast: false
+      matrix:
+        test_role:
+          - postfix
+          - selinux
+          - timesync
+          - kdump
+          - network
+          - storage
+          - metrics
+          - tlog
+          - kernel_settings
+          - logging
+          - nbde_server
+          - nbde_client
+          - certificate
+          - crypto_policies
+          - sshd
+          - ssh
+          - ha_cluster
+          - vpn
+          - firewall
+          - cockpit
+          - podman
+          - ad_integration
+          - rhc
+          - journald
+          - postgresql
+          - systemd
+          - keylime_server
+          - fapolicyd
+          - bootloader
+          - snapshot
+          - gfs2
+          - sudo
+        include:
+          - platform: Fedora-39
+            ansible_version: 2.17
+          - platform: Fedora-40
+            ansible_version: 2.17
+          - platform: CentOS-7-latest
+            ansible_version: 2.9
+          - platform: CentOS-Stream-8
+            ansible_version: 2.9
+          # On CentOS-Stream-8, latest supported Ansible is 2.16
+          - platform: CentOS-Stream-8
+            ansible_version: 2.16
+          - platform: CentOS-Stream-9
+            ansible_version: 2.17
+          - platform: CentOS-Stream-10
+            ansible_version: 2.17
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set commit status as pending
+        uses: myrotvorets/set-commit-status-action@master
+        with:
+          sha: ${{ needs.prepare_run_vars.outputs.head_sha }}
+          status: pending
+          context: ${{ matrix.platform }}|ansible-${{ matrix.ansible_version }}
+          description: Test started
+          targetUrl: ""
+
+      - name: Run general plan against ${{ matrix.test_role }}
+        uses: sclorg/testing-farm-as-github-action@v3
+        continue-on-error: true
+        with:
+          git_url: ${{ github.event.repository.html_url }}
+          git_ref: ${{ needs.prepare_run_vars.outputs.head_sha }}
+          pipeline_settings: '{ "type": "tmt-multihost" }'
+          environment_settings: '{ "provisioning": { "tags": { "BusinessUnit": "system_roles" } } }'
+          # Keeping ARTIFACTS_URL at the bottom makes the link in logs clickable
+          variables: "ANSIBLE_VER=${{ matrix.ansible_version }};\
+            REPO_NAME=${{ matrix.test_role }};\
+            GITHUB_ORG=${{ github.repository_owner }};\
+            ARTIFACTS_DIR=${{ needs.prepare_run_vars.outputs.ARTIFACTS_DIR }};\
+            TEST_LOCAL_CHANGES=false;\
+            LINUXSYSTEMROLES_USER=${{ vars.LINUXSYSTEMROLES_USER }};\
+            ARTIFACTS_URL=${{ needs.prepare_run_vars.outputs.ARTIFACTS_URL }};\
+            GET_PYTHON_MODULES=${{ contains(github.event.comment.body, '[get_python_modules]') ||
+              github.event_name == 'workflow_dispatch' }}"
+          # Note that LINUXSYSTEMROLES_SSH_KEY must be single-line, TF doesn't read multi-line variables fine.
+          secrets: "LINUXSYSTEMROLES_DOMAIN=${{ secrets.LINUXSYSTEMROLES_DOMAIN }};\
+            LINUXSYSTEMROLES_SSH_KEY=${{ secrets.LINUXSYSTEMROLES_SSH_KEY }}"
+          compose: ${{ matrix.platform }}
+          # There are two blockers for using public ranch:
+          # 1. multihost is not supported in public https://github.com/teemtee/tmt/issues/2620
+          # 2. Security issue that leaks long secrets - Jira TFT-2698
+          tf_scope: private
+          api_key: ${{ secrets.TF_API_KEY_RH }}
+          update_pull_request_status: false
+          tmt_hardware: '{ "memory": ">= 4096" }'
+          tmt_plan_filter: "tag:general"
+
+      - name: Set final commit status
+        uses: myrotvorets/set-commit-status-action@master
+        if: |
+          always()
+        with:
+          sha: ${{ needs.prepare_run_vars.outputs.head_sha }}
+          status: ${{ job.status }}
+          context: ${{ matrix.platform }}|ansible-${{ matrix.ansible_version }}
+          description: Test finished
+          targetUrl: ${{ needs.prepare_run_vars.outputs.ARTIFACTS_URL }}

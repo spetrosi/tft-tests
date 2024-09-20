@@ -284,7 +284,8 @@ rolesIsVirtual() {
 
 rolesUploadLogs() {
     local logfile=$1
-    local guests_yml=$2
+    # use global variable for now
+    # local guests_yml=$2
     local id_rsa_path pr_substr os artifact_dirname target_dir
     if [ -z "$LINUXSYSTEMROLES_SSH_KEY" ]; then
         rlFileSubmit "$logfile"

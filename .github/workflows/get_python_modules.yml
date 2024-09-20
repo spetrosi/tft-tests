@@ -8,11 +8,18 @@ permissions:
   contents: read
   # This is required for the ability to create/update the Pull request status
   statuses: write
+env:
+  TEST_ROLES: >-
+    ["ad_integration", "bootloader", "certificate", "cockpit", "crypto_policies", "fapolicyd",
+     "firewall", "gfs2", "ha_cluster", "journald", "kdump", "kernel_settings", "keylime_server",
+     "logging", "metrics", "nbde_client", "nbde_server", "network", "podman", "postfix",
+     "postgresql", "rhc", "selinux", "snapshot", "ssh", "sshd", "storage", "sudo", "systemd",
+     "timesync", "tlog", "vpn"]
 jobs:
   prepare_run_vars:
     name: Get head sha of the tft-tests PR
     concurrency:
-      # group name contains reponame-pr_num to allow simualteneous runs in different PRs
+      # group name contains reponame-pr_num to allow simultaneous runs in different PRs
       group: testing-farm-${{ github.event.repository.name }}-${{ github.event.issue.number }}
       cancel-in-progress: true
     # Let's schedule tests only on user request. NOT automatically.
@@ -25,8 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       head_sha: ${{ steps.head_sha.outputs.head_sha }}
-      ARTIFACTS_DIR: ${{ needs.prepare_run_vars.outputs.ARTIFACTS_DIR }}
-      ARTIFACTS_URL: ${{ needs.prepare_run_vars.outputs.ARTIFACTS_URL }}
+      TEST_ROLES: ${{ steps.set_vars.outputs.TEST_ROLES }}
     steps:
       - name: Dump github context
         run:   echo "$GITHUB_CONTEXT"
@@ -45,21 +51,15 @@ jobs:
           PR_NO: ${{ github.event.issue.number }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Set variables with DATETIME and artifact location
+      - name: Set variables used by all tests
         id: set_vars
         run: |
-          printf -v DATETIME '%(%Y%m%d-%H%M%S)T' -1
-          ARTIFACTS_DIR_NAME="tf_${{ github.event.repository.name }}-${{ github.event.issue.number }}_\
-          ${{ matrix.platform }}-${{ matrix.ansible_version }}_$DATETIME/artifacts"
-          ARTIFACTS_TARGET_DIR=/srv/pub/alt/${{ vars.LINUXSYSTEMROLES_USER }}/logs
-          ARTIFACTS_DIR=$ARTIFACTS_TARGET_DIR/$ARTIFACTS_DIR_NAME
-          ARTIFACTS_URL=https://dl.fedoraproject.org/pub/alt/${{ vars.LINUXSYSTEMROLES_USER }}/logs/$ARTIFACTS_DIR_NAME
-          echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_OUTPUT
-          echo "ARTIFACTS_URL=$ARTIFACTS_URL" >> $GITHUB_OUTPUT
+          echo "TEST_ROLES=$TEST_ROLES" >> $GITHUB_OUTPUT
 
   prepare_role_vars:
     name: Get info from test roles
     runs-on: ubuntu-latest
+    needs: prepare_run_vars
     outputs:
       postfix_memory: ${{ steps.memory.outputs.postfix_memory }}
       postfix_supported_platforms: ${{ steps.supported_platforms.outputs.postfix_supported_platforms }}
@@ -127,39 +127,7 @@ jobs:
       sudo_supported_platforms: ${{ steps.supported_platforms.outputs.sudo_supported_platforms }}
     strategy:
       matrix:
-        test_role:
-          - postfix
-          - selinux
-          - timesync
-          - kdump
-          - network
-          - storage
-          - metrics
-          - tlog
-          - kernel_settings
-          - logging
-          - nbde_server
-          - nbde_client
-          - certificate
-          - crypto_policies
-          - sshd
-          - ssh
-          - ha_cluster
-          - vpn
-          - firewall
-          - cockpit
-          - podman
-          - ad_integration
-          - rhc
-          - journald
-          - postgresql
-          - systemd
-          - keylime_server
-          - fapolicyd
-          - bootloader
-          - snapshot
-          - gfs2
-          - sudo
+        test_role: ${{ fromJSON(needs.prepare_run_vars.outputs.TEST_ROLES) }}
     steps:
       - name: Checkout the ${{ matrix.test_role }} repo
         uses: actions/checkout@v4
@@ -208,46 +176,14 @@ jobs:
           echo "${{ matrix.test_role }}_supported_platforms=$supported_platforms" >> $GITHUB_OUTPUT
 
   testing-farm:
-    name: ${{ matrix.platform }}/ansible-${{ matrix.ansible_version }}
+    name: ${{ matrix.test_role }}/${{ matrix.platform }}/ansible-${{ matrix.ansible_version }}
     needs:
       - prepare_run_vars
       - prepare_role_vars
     strategy:
       fail-fast: false
       matrix:
-        test_role:
-          - postfix
-          - selinux
-          - timesync
-          - kdump
-          - network
-          - storage
-          - metrics
-          - tlog
-          - kernel_settings
-          - logging
-          - nbde_server
-          - nbde_client
-          - certificate
-          - crypto_policies
-          - sshd
-          - ssh
-          - ha_cluster
-          - vpn
-          - firewall
-          - cockpit
-          - podman
-          - ad_integration
-          - rhc
-          - journald
-          - postgresql
-          - systemd
-          - keylime_server
-          - fapolicyd
-          - bootloader
-          - snapshot
-          - gfs2
-          - sudo
+        test_role: ${{ fromJSON(needs.prepare_run_vars.outputs.TEST_ROLES) }}
         include:
           - platform: Fedora-39
             ansible_version: 2.17
@@ -266,12 +202,25 @@ jobs:
             ansible_version: 2.17
     runs-on: ubuntu-latest
     steps:
+      - name: Prepare ARTIFACTS_DIR and ARTIFACTS_URL
+        id: prepare_artifacts_info
+        run: |
+          printf -v DATETIME '%(%Y%m%d-%H%M%S)T' -1
+          ARTIFACTS_DIR_NAME="tf_${{ github.event.repository.name }}-${{ github.event.issue.number }}_\
+          ${{ matrix.platform }}-${{ matrix.ansible_version }}_$DATETIME/artifacts"
+          ARTIFACTS_TARGET_DIR=/srv/pub/alt/${{ vars.LINUXSYSTEMROLES_USER }}/logs
+          ARTIFACTS_DIR=$ARTIFACTS_TARGET_DIR/$ARTIFACTS_DIR_NAME
+          ARTIFACTS_URL=https://dl.fedoraproject.org/pub/alt/${{ vars.LINUXSYSTEMROLES_USER }}/logs/$ARTIFACTS_DIR_NAME
+          echo "DATETIME=$DATETIME" >> $GITHUB_OUTPUT
+          echo "ARTIFACTS_DIR=$ARTIFACTS_DIR" >> $GITHUB_OUTPUT
+          echo "ARTIFACTS_URL=$ARTIFACTS_URL" >> $GITHUB_OUTPUT
+
       - name: Set commit status as pending
         uses: myrotvorets/set-commit-status-action@master
         with:
           sha: ${{ needs.prepare_run_vars.outputs.head_sha }}
           status: pending
-          context: ${{ matrix.platform }}|ansible-${{ matrix.ansible_version }}
+          context: ${{ matrix.test_role }}|${{ matrix.platform }}|ansible-${{ matrix.ansible_version }}
           description: Test started
           targetUrl: ""
 
@@ -287,10 +236,10 @@ jobs:
           variables: "ANSIBLE_VER=${{ matrix.ansible_version }};\
             REPO_NAME=${{ matrix.test_role }};\
             GITHUB_ORG=${{ github.repository_owner }};\
-            ARTIFACTS_DIR=${{ needs.prepare_run_vars.outputs.ARTIFACTS_DIR }};\
+            ARTIFACTS_DIR=${{ steps.prepare_artifacts_info.outputs.ARTIFACTS_DIR }};\
             TEST_LOCAL_CHANGES=false;\
             LINUXSYSTEMROLES_USER=${{ vars.LINUXSYSTEMROLES_USER }};\
-            ARTIFACTS_URL=${{ needs.prepare_run_vars.outputs.ARTIFACTS_URL }};\
+            ARTIFACTS_URL=${{ steps.prepare_artifacts_info.outputs.ARTIFACTS_URL }};\
             GET_PYTHON_MODULES=${{ contains(github.event.comment.body, '[get_python_modules]') ||
               github.event_name == 'workflow_dispatch' }}"
           # Note that LINUXSYSTEMROLES_SSH_KEY must be single-line, TF doesn't read multi-line variables fine.
@@ -313,6 +262,6 @@ jobs:
         with:
           sha: ${{ needs.prepare_run_vars.outputs.head_sha }}
           status: ${{ job.status }}
-          context: ${{ matrix.platform }}|ansible-${{ matrix.ansible_version }}
+          context: ${{ matrix.test_role }}|${{ matrix.platform }}|ansible-${{ matrix.ansible_version }}
           description: Test finished
-          targetUrl: ${{ needs.prepare_run_vars.outputs.ARTIFACTS_URL }}
+          targetUrl: ${{ steps.prepare_artifacts_info.outputs.ARTIFACTS_URL }}

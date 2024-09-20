@@ -54,7 +54,7 @@ jobs:
       - name: Set variables used by all tests
         id: set_vars
         run: |
-          echo "TEST_ROLES=$TEST_ROLES" >> $GITHUB_OUTPUT
+          echo "TEST_ROLES=${{ toJSON(fromJSON(env.TEST_ROLES)) }}" >> $GITHUB_OUTPUT
 
   prepare_role_vars:
     name: Get info from test roles

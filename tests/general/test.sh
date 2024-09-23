@@ -63,6 +63,10 @@ rlJournalStart
         done
         if [ -n "$ANSIBLE_VER" ]; then
             rolesInstallAnsible
+            if [ "$ANSIBLE_VER" = 2.9 ]; then
+                # does not work with 2.9
+                GET_PYTHON_MODULES=false
+            fi
         else
             rlLogInfo "ANSIBLE_VER not defined - using system ansible if installed"
         fi
@@ -85,10 +89,14 @@ rlJournalStart
         # shellcheck disable=SC2154
         inventory=$(rolesPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
         rlRun "cat $inventory"
+        tests_path="$collection_path"/ansible_collections/fedora/linux_system_roles/tests/"$REPO_NAME"/
+        if [ "${GET_PYTHON_MODULES:-}" = true ]; then
+            # shellcheck disable=SC2086
+            rolesSetupGetPythonModules "$tests_path" $test_playbooks
+        fi
     rlPhaseEnd
     rlPhaseStartTest
         managed_nodes=$(rolesGetManagedNodes "$guests_yml")
-        tests_path="$collection_path"/ansible_collections/fedora/linux_system_roles/tests/"$REPO_NAME"/
         rolesRunPlaybooksParallel "$tests_path" "$inventory" "$SKIP_TAGS" "$test_playbooks" "$managed_nodes"
     rlPhaseEnd
 rlJournalEnd

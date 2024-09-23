@@ -230,7 +230,7 @@ jobs:
           - nbde_client
           - certificate
           - crypto_policies
-          - sshd
+          # - sshd
           - ssh
           - ha_cluster
           - vpn

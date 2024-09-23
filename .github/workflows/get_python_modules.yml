@@ -164,7 +164,7 @@ jobs:
       - name: Checkout the ${{ matrix.test_role }} repo
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.repository_owner }}/${{ matrix.test_role }}
+          repository: linux-system-roles/${{ matrix.test_role }}
           ref: main
           path: ${{ matrix.test_role }}
 
@@ -286,7 +286,7 @@ jobs:
           # Keeping ARTIFACTS_URL at the bottom makes the link in logs clickable
           variables: "ANSIBLE_VER=${{ matrix.ansible_version }};\
             REPO_NAME=${{ matrix.test_role }};\
-            GITHUB_ORG=${{ github.repository_owner }};\
+            GITHUB_ORG=linux-system-roles;\
             ARTIFACTS_DIR=${{ needs.prepare_run_vars.outputs.ARTIFACTS_DIR }};\
             TEST_LOCAL_CHANGES=false;\
             LINUXSYSTEMROLES_USER=${{ vars.LINUXSYSTEMROLES_USER }};\

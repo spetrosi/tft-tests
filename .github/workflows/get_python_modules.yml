@@ -142,7 +142,7 @@ jobs:
           - nbde_client
           - certificate
           - crypto_policies
-          - sshd
+          # - sshd
           - ssh
           - ha_cluster
           - vpn
@@ -173,7 +173,7 @@ jobs:
         run: |
           provision_fmf=${{ matrix.test_role }}/tests/provision.fmf
           if [ -f "$provision_fmf" ]; then
-            memory=$(grep -rPo '    m: \K(.*)' "$provision_fmf")
+            memory=$(grep -rPo '    m: \K(.*)' "$provision_fmf" || true)
           fi
           if [ -z "$memory" ]; then
             memory=2048

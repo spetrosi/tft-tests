@@ -25,8 +25,8 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       head_sha: ${{ steps.head_sha.outputs.head_sha }}
-      ARTIFACTS_DIR: ${{ needs.prepare_run_vars.outputs.ARTIFACTS_DIR }}
-      ARTIFACTS_URL: ${{ needs.prepare_run_vars.outputs.ARTIFACTS_URL }}
+      ARTIFACTS_DIR: ${{ steps.set_vars.outputs.ARTIFACTS_DIR }}
+      ARTIFACTS_URL: ${{ steps.set_vars.outputs.ARTIFACTS_URL }}
     steps:
       - name: Dump github context
         run:   echo "$GITHUB_CONTEXT"
@@ -271,7 +271,7 @@ jobs:
         with:
           sha: ${{ needs.prepare_run_vars.outputs.head_sha }}
           status: pending
-          context: ${{ matrix.platform }}|ansible-${{ matrix.ansible_version }}
+          context: ${{ matrix.test_role }}-${{ matrix.platform }}|ansible-${{ matrix.ansible_version }}
           description: Test started
           targetUrl: ""
 

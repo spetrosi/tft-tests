@@ -290,6 +290,7 @@ jobs:
             ARTIFACTS_DIR=${{ needs.prepare_run_vars.outputs.ARTIFACTS_DIR }};\
             TEST_LOCAL_CHANGES=false;\
             LINUXSYSTEMROLES_USER=${{ vars.LINUXSYSTEMROLES_USER }};\
+            GET_PYTHON_MODULES=true;
             ARTIFACTS_URL=${{ needs.prepare_run_vars.outputs.ARTIFACTS_URL }}"
           # Note that LINUXSYSTEMROLES_SSH_KEY must be single-line, TF doesn't read multi-line variables fine.
           secrets: "LINUXSYSTEMROLES_DOMAIN=${{ secrets.LINUXSYSTEMROLES_DOMAIN }};\

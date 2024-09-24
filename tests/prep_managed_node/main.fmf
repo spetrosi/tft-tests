@@ -6,3 +6,5 @@ tag: prep_managed_node
 require:
     - beakerlib
     - git
+    # Required for yq
+    - jq

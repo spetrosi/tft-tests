@@ -1,0 +1,10 @@
+summary: Test mssql role with HA scenario
+framework: beakerlib
+test: ./mssql_ha.sh
+duration: 8h
+tag: mssql_ha
+require:
+    - beakerlib
+    - git
+    # Required for yq
+    - jq

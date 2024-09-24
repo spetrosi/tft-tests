@@ -55,17 +55,14 @@ rlJournalStart
     rlPhaseStartSetup
         rlRun "rlImport library"
         rolesLabBosRepoWorkaround
-        rolesPrepTMTVars
+        rolesPrepTestVars
         for required_var in "${REQUIRED_VARS[@]}"; do
             if [ -z "${!required_var}" ]; then
                 rlDie "This required variable is unset: $required_var "
             fi
         done
-        if [ -n "$ANSIBLE_VER" ]; then
-            rolesInstallAnsible
-        else
-            rlLogInfo "ANSIBLE_VER not defined - using system ansible if installed"
-        fi
+        rolesInstallAnsible
+        rolesInstallYq
         rolesGetRoleDir
         # role_path is defined in rolesGetRoleDir
         # shellcheck disable=SC2154
@@ -77,11 +74,13 @@ rlJournalStart
         for test_playbook in $test_playbooks; do
             rolesHandleVault "$role_path" "$test_playbook"
         done
-        collection_path=$(mktemp --directory -t collections-XXX)
+        rolesGetCollectionPath
+        # collection_path and guests_yml is defined in rolesGetCollectionPath
+        # shellcheck disable=SC2154
         rolesInstallDependencies "$role_path" "$collection_path"
         rolesEnableCallbackPlugins "$collection_path"
         rolesConvertToCollection "$role_path" "$collection_path"
-        # tmt_tree_provision and guests_yml is defined in rolesPrepTMTVars
+        # tmt_tree_provision and guests_yml is defined in rolesPrepTestVars
         # shellcheck disable=SC2154
         inventory=$(rolesPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
         rlRun "cat $inventory"

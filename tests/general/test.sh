@@ -54,48 +54,48 @@ REQUIRED_VARS=("ANSIBLE_VER" "REPO_NAME")
 rlJournalStart
     rlPhaseStartSetup
         rlRun "rlImport library"
-        rolesLabBosRepoWorkaround
-        rolesPrepTestVars
+        lsrLabBosRepoWorkaround
+        lsrPrepTestVars
         for required_var in "${REQUIRED_VARS[@]}"; do
             if [ -z "${!required_var}" ]; then
                 rlDie "This required variable is unset: $required_var "
             fi
         done
-        rolesInstallAnsible
-        rolesInstallYq
+        lsrInstallAnsible
+        lsrInstallYq
         if [ "${ANSIBLE_VER:-}" = 2.9 ]; then
             # does not work with 2.9
             GET_PYTHON_MODULES=false
         fi
-        rolesGetRoleDir
-        # role_path is defined in rolesGetRoleDir
+        lsrGetRoleDir
+        # role_path is defined in lsrGetRoleDir
         # shellcheck disable=SC2154
-        test_playbooks=$(rolesGetTests "$role_path")
+        test_playbooks=$(lsrGetTests "$role_path")
         rlLogInfo "Test playbooks: $test_playbooks"
         if [ -z "$test_playbooks" ]; then
             rlDie "No test playbooks found"
         fi
         for test_playbook in $test_playbooks; do
-            rolesHandleVault "$role_path" "$test_playbook"
+            lsrHandleVault "$role_path" "$test_playbook"
         done
-        rolesGetCollectionPath
-        # collection_path and guests_yml is defined in rolesGetCollectionPath
+        lsrGetCollectionPath
+        # collection_path and guests_yml is defined in lsrGetCollectionPath
         # shellcheck disable=SC2154
-        rolesInstallDependencies "$role_path" "$collection_path"
-        rolesEnableCallbackPlugins "$collection_path"
-        rolesConvertToCollection "$role_path" "$collection_path"
-        # tmt_tree_provision and guests_yml is defined in rolesPrepTestVars
+        lsrInstallDependencies "$role_path" "$collection_path"
+        lsrEnableCallbackPlugins "$collection_path"
+        lsrConvertToCollection "$role_path" "$collection_path"
+        # tmt_tree_provision and guests_yml is defined in lsrPrepTestVars
         # shellcheck disable=SC2154
-        inventory=$(rolesPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
+        inventory=$(lsrPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
         rlRun "cat $inventory"
         tests_path="$collection_path"/ansible_collections/fedora/linux_system_roles/tests/"$REPO_NAME"/
         if [ "${GET_PYTHON_MODULES:-}" = true ]; then
             # shellcheck disable=SC2086
-            rolesSetupGetPythonModules "$tests_path" $test_playbooks
+            lsrSetupGetPythonModules "$tests_path" $test_playbooks
         fi
     rlPhaseEnd
     rlPhaseStartTest
-        managed_nodes=$(rolesGetManagedNodes "$guests_yml")
-        rolesRunPlaybooksParallel "$tests_path" "$inventory" "$SKIP_TAGS" "$test_playbooks" "$managed_nodes"
+        managed_nodes=$(lsrGetManagedNodes "$guests_yml")
+        lsrRunPlaybooksParallel "$tests_path" "$inventory" "$SKIP_TAGS" "$test_playbooks" "$managed_nodes"
     rlPhaseEnd
 rlJournalEnd

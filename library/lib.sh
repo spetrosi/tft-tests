@@ -9,7 +9,7 @@
 #   library-prefix = library
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-rolesPrepTestVars() {
+lsrPrepTestVars() {
     tmt_tree_parent=${TMT_TREE%/*}
     tmt_plan=$(basename "$tmt_tree_parent")
     tmt_tree_provision=$tmt_tree_parent/provision
@@ -17,11 +17,11 @@ rolesPrepTestVars() {
     declare -gA ANSIBLE_ENVS
 }
 
-rolesLabBosRepoWorkaround() {
+lsrLabBosRepoWorkaround() {
     sed -i 's|\.lab\.bos.|.devel.|g' /etc/yum.repos.d/*.repo
 }
 
-rolesInstallAnsible() {
+lsrInstallAnsible() {
     # Hardcode to the only supported version on later ELs
     if rlIsRHELLike 8 && [ "$ANSIBLE_VER" == "2.9" ]; then
         PYTHON_VERSION=3.9
@@ -48,12 +48,12 @@ rolesInstallAnsible() {
     fi
 }
 
-rolesInstallYq() {
+lsrInstallYq() {
     rlRun "yum install python3-pip -y"
     rlRun "python3 -m pip install yq"
 }
 
-rolesCloneRepo() {
+lsrCloneRepo() {
     local role_path=$1
     rlRun "git clone -q https://github.com/$GITHUB_ORG/$REPO_NAME.git $role_path --depth 1"
     if [ -n "$PR_NUM" ]; then
@@ -68,17 +68,17 @@ rolesCloneRepo() {
     fi
 }
 
-rolesGetRoleDir() {
+lsrGetRoleDir() {
     if [ "$TEST_LOCAL_CHANGES" == true ] || [ "$TEST_LOCAL_CHANGES" == True ]; then
         rlLog "Test from local changes"
         role_path="$TMT_TREE"
     else
         role_path=$(mktemp --directory -t "$REPO_NAME"-XXX)
-        rolesCloneRepo "$role_path"
+        lsrCloneRepo "$role_path"
     fi
 }
 
-rolesGetTests() {
+lsrGetTests() {
     local role_path=$1
     local test_playbooks_all test_playbooks
     tests_path="$role_path"/tests/
@@ -109,7 +109,7 @@ rolesGetTests() {
 }
 
 # Handle Ansible Vault encrypted variables
-rolesHandleVault() {
+lsrHandleVault() {
     local role_path=$1
     local playbook_file=$role_path/tests/$2
     local vault_pwd_file=$role_path/tests/vault_pwd
@@ -145,29 +145,29 @@ $(cat "$playbook_file")" > "$playbook_file".tmp
     mv "$playbook_file".tmp "$playbook_file"
 }
 
-rolesIsAnsibleEnvVarSupported() {
+lsrIsAnsibleEnvVarSupported() {
     # Return 0 if supported, 1 if not supported
     local env_var_name=$1
     ansible-config list | grep -q "name: $env_var_name$"
 }
 
-rolesIsAnsibleCmdOptionSupported() {
+lsrIsAnsibleCmdOptionSupported() {
     # Return 0 if supported, 1 if not supported
     local cmd=$1
     local option=$2
     $cmd --help | grep -q -e "$option"
 }
 
-rolesGetCollectionPath() {
+lsrGetCollectionPath() {
     collection_path=$(mktemp --directory -t collections-XXX)
-    if rolesIsAnsibleEnvVarSupported ANSIBLE_COLLECTIONS_PATH; then
+    if lsrIsAnsibleEnvVarSupported ANSIBLE_COLLECTIONS_PATH; then
         ANSIBLE_ENVS[ANSIBLE_COLLECTIONS_PATH]="$collection_path"
     else
         ANSIBLE_ENVS[ANSIBLE_COLLECTIONS_PATHS]="$collection_path"
     fi
 }
 
-rolesInstallDependencies() {
+lsrInstallDependencies() {
     local role_path=$1
     local collection_path=$2
     local coll_req_file="$1/meta/collection-requirements.yml"
@@ -182,7 +182,7 @@ rolesInstallDependencies() {
     done
 }
 
-rolesEnableCallbackPlugins() {
+lsrEnableCallbackPlugins() {
     local collection_path=$1
     local cmd
     # Enable callback plugins for prettier ansible output
@@ -190,9 +190,9 @@ rolesEnableCallbackPlugins() {
     if [ ! -f "$collection_path"/"$callback_path"/debug.py ] || [ ! -f "$collection_path"/"$callback_path"/profile_tasks.py ]; then
         ansible_posix=$(mktemp --directory -t ansible_posix-XXX)
         cmd="ansible-galaxy collection install ansible.posix -p $ansible_posix -vv"
-        if rolesIsAnsibleCmdOptionSupported "ansible-galaxy collection install" "--force-with-deps"; then
+        if lsrIsAnsibleCmdOptionSupported "ansible-galaxy collection install" "--force-with-deps"; then
             rlRun "$cmd --force-with-deps"
-        elif rolesIsAnsibleCmdOptionSupported "ansible-galaxy collection install" "--force"; then
+        elif lsrIsAnsibleCmdOptionSupported "ansible-galaxy collection install" "--force"; then
             rlRun "$cmd --force"
         else
             rlRun "$cmd"
@@ -203,7 +203,7 @@ rolesEnableCallbackPlugins() {
         rlRun "cp $ansible_posix/$callback_path/{debug.py,profile_tasks.py} $collection_path/$callback_path/"
         rlRun "rm -rf $ansible_posix"
     fi
-    if rolesIsAnsibleEnvVarSupported ANSIBLE_CALLBACKS_ENABLED; then
+    if lsrIsAnsibleEnvVarSupported ANSIBLE_CALLBACKS_ENABLED; then
         ANSIBLE_ENVS[ANSIBLE_CALLBACKS_ENABLED]="profile_tasks"
     else
         ANSIBLE_ENVS[ANSIBLE_CALLBACK_WHITELIST]="profile_tasks"
@@ -211,7 +211,7 @@ rolesEnableCallbackPlugins() {
     ANSIBLE_ENVS[ANSIBLE_STDOUT_CALLBACK]="debug"
 }
 
-rolesConvertToCollection() {
+lsrConvertToCollection() {
     local role_path=$1
     local collection_path=$2
     local collection_script_url=https://raw.githubusercontent.com/linux-system-roles/auto-maintenance/main
@@ -255,22 +255,22 @@ rolesConvertToCollection() {
 --subrole-prefix $subrole_prefix"
 }
 
-rolesGetManagedNodes() {
+lsrGetManagedNodes() {
     local guests_yml=$1
     yq -r ". | keys[] | select(test(\"managed*\"))" "$guests_yml" | sort
 }
 
-rolesGetNodes() {
+lsrGetNodes() {
     local guests_yml=$1
     yq -r ". | keys[]" "$guests_yml" | sort
 }
 
-rolesGetControlNodeName() {
+lsrGetControlNodeName() {
     local guests_yml=$1
     yq -r ". | keys[] | select(test(\"control*\"))" "$guests_yml"
 }
 
-rolesPrepareInventoryVars() {
+lsrPrepareInventoryVars() {
     local role_path=$1
     local tmt_tree_provision=$2
     local guests_yml=$3
@@ -278,9 +278,9 @@ rolesPrepareInventoryVars() {
     inventory=$(mktemp -p "$role_path" -t inventory-XXX.yml)
     # TMT_TOPOLOGY_ variables are not available in tmt try.
     # Reading topology from guests.yml for compatibility with tmt try
-    is_virtual=$(rolesIsVirtual "$tmt_tree_provision")
-    managed_nodes=$(rolesGetManagedNodes "$guests_yml")
-    control_node_name=$(rolesGetControlNodeName "$guests_yml")
+    is_virtual=$(lsrIsVirtual "$tmt_tree_provision")
+    managed_nodes=$(lsrGetManagedNodes "$guests_yml")
+    control_node_name=$(lsrGetControlNodeName "$guests_yml")
     echo "---
 all:
   hosts:" > "$inventory"
@@ -298,14 +298,14 @@ all:
     rlRun "echo $inventory"
 }
 
-rolesIsVirtual() {
+lsrIsVirtual() {
     # Returns 0 if provisioned with "how: virtual"
     local tmt_tree_provision=$1
     grep -q 'how: virtual' "$tmt_tree_provision"/step.yaml
     echo $?
 }
 
-rolesUploadLogs() {
+lsrUploadLogs() {
     local logfile=$1
     local guests_yml=$2
     local id_rsa_path pr_substr os artifact_dirname target_dir
@@ -319,7 +319,7 @@ rolesUploadLogs() {
         -e 's| -----END OPENSSH PRIVATE KEY-----|\n-----END OPENSSH PRIVATE KEY-----|' > "$id_rsa_path" # notsecret
     chmod 600 "$id_rsa_path"
     if [ -z "$ARTIFACTS_DIR" ]; then
-        control_node_name=$(rolesGetControlNodeName "$guests_yml")
+        control_node_name=$(lsrGetControlNodeName "$guests_yml")
         os=$(yq -r ".\"$control_node_name\".facts.distro" "$guests_yml" | sed 's/ /_/g')
         printf -v date '%(%Y%m%d-%H%M%S)T' -1
         if [ -z "$PR_NUM" ]; then
@@ -339,7 +339,7 @@ rolesUploadLogs() {
     rlRun "rm $id_rsa_path"
 }
 
-rolesArrtoStr() {
+lsrArrtoStr() {
     # Convert associative array into a space separated key=value list
     declare -n arr="$1"
     for k in "${!arr[@]}"; do
@@ -348,7 +348,7 @@ rolesArrtoStr() {
     echo
 }
 
-rolesRunPlaybook() {
+lsrRunPlaybook() {
     local tests_path=$1
     local test_playbook=$2
     local inventory=$3
@@ -361,7 +361,7 @@ rolesRunPlaybook() {
     if [ "${GET_PYTHON_MODULES:-}" = true ]; then
         ans_debug="ANSIBLE_DEBUG=true"
     fi
-    cmd="$(rolesArrtoStr ANSIBLE_ENVS) $ans_debug ansible-playbook -i $inventory $skip_tags $limit $tests_path$test_playbook -vv"
+    cmd="$(lsrArrtoStr ANSIBLE_ENVS) $ans_debug ansible-playbook -i $inventory $skip_tags $limit $tests_path$test_playbook -vv"
     log_msg="Test $test_playbook with ANSIBLE-$ANSIBLE_VER on ${limit/--limit /}"
     # If LSR_TFT_DEBUG is true, print output to terminal
     if [ "$LSR_TFT_DEBUG" == true ] || [ "$LSR_TFT_DEBUG" == True ]; then
@@ -372,17 +372,17 @@ rolesRunPlaybook() {
     logfile_name=$LOGFILE-$result.log
     mv "$LOGFILE" "$logfile_name"
     LOGFILE=$logfile_name
-    rolesUploadLogs "$LOGFILE" "$guests_yml"
+    lsrUploadLogs "$LOGFILE" "$guests_yml"
     if [ "${GET_PYTHON_MODULES:-}" = true ]; then
-        cmd="$(rolesArrtoStr ANSIBLE_ENVS) ansible-playbook -i $inventory $skip_tags $limit process_python_modules_packages.yml -vv"
+        cmd="$(lsrArrtoStr ANSIBLE_ENVS) ansible-playbook -i $inventory $skip_tags $limit process_python_modules_packages.yml -vv"
         local packages="$LOGFILE.packages"
         rlRun "$cmd -e packages_file=$packages -e logfile=$LOGFILE &> $LOGFILE.modules" 0 "process python modules"
-        rolesUploadLogs "$LOGFILE.modules" "$guests_yml"
-        rolesUploadLogs "$packages" "$guests_yml"
+        lsrUploadLogs "$LOGFILE.modules" "$guests_yml"
+        lsrUploadLogs "$packages" "$guests_yml"
     fi
 }
 
-rolesRunPlaybooksParallel() {
+lsrRunPlaybooksParallel() {
     # Run playbooks on managed nodes one by one
     # Supports running against a single node too
     local tests_path=$1
@@ -399,7 +399,7 @@ rolesRunPlaybooksParallel() {
                 test_playbook=${test_playbooks_arr[0]}
                 test_playbooks_arr=("${test_playbooks_arr[@]:1}") # Remove first element from array
                 LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"-$tmt_plan
-                rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$skip_tags" "--limit $managed_node" "$LOGFILE" &
+                lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$skip_tags" "--limit $managed_node" "$LOGFILE" &
                 sleep 1
                 break
             fi
@@ -415,34 +415,34 @@ rolesRunPlaybooksParallel() {
     done
 }
 
-rolesCS8InstallPython() {
+lsrCS8InstallPython() {
     # Install python on managed node when running CS8 with ansible!=2.9
     if [ "$ANSIBLE_VER" != "2.9" ] && grep -q 'CentOS Stream release 8' /etc/redhat-release; then
         rlRun "dnf install -y python$PYTHON_VERSION"
     fi
 }
 
-rolesDistributeSSHKeys() {
+lsrDistributeSSHKeys() {
     # name: Distribute SSH keys when provisioned with how=virtual
     local tmt_tree_provision=$1
     local control_node_id_ecdsa_pub control_node_name
-    control_node_name=$(rolesGetControlNodeName "$guests_yml")
+    control_node_name=$(lsrGetControlNodeName "$guests_yml")
     control_node_id_ecdsa_pub=$tmt_tree_provision/$control_node_name/id_ecdsa.pub
     if [ -f "$control_node_id_ecdsa_pub" ]; then
         rlRun "cat $control_node_id_ecdsa_pub >> ~/.ssh/authorized_keys"
     fi
 }
 
-rolesSetHostname() {
+lsrSetHostname() {
     local guests_yml=$1
     ip_addr=$(hostname -I | awk '{print $1}')
     hostname=$(yq -r "to_entries | .[] | select(.value.\"primary-address\" == \"$ip_addr\") | .key" "$guests_yml")
     rlRun "hostnamectl set-hostname $hostname"
 }
 
-rolesBuildEtcHosts() {
+lsrBuildEtcHosts() {
     local guests_yml=$1
-    managed_nodes=$(rolesGetManagedNodes "$guests_yml")
+    managed_nodes=$(lsrGetManagedNodes "$guests_yml")
     for managed_node in $managed_nodes; do
         managed_node_ip=$(yq -r ".\"$managed_node\".\"primary-address\"" "$guests_yml")
         echo "$managed_node_ip" "$managed_node" >> /etc/hosts
@@ -450,7 +450,7 @@ rolesBuildEtcHosts() {
     rlRun "cat /etc/hosts"
 }
 
-rolesEnableHA() {
+lsrEnableHA() {
 # This function enables the ha repository on platforms that require it and do not have it enabled by default
 # The ha repository is required by the mssql and ha_cluster roles
     local ha_reponame
@@ -467,20 +467,20 @@ rolesEnableHA() {
     fi
 }
 
-rolesDisableNFV() {
+lsrDisableNFV() {
     # The nfv-source repo causes troubles in CentOS-9 Stream compose while system-roles testing
     if [ "$(find /etc/yum.repos.d/ -name 'centos-addons.repo' | wc -l )" -gt 0 ]; then
         rlRun "sed -i '/^\[nfv-source\]/,/^$/d' /etc/yum.repos.d/centos-addons.repo"
     fi
 }
 
-rolesGenerateTestDisks() {
+lsrGenerateTestDisks() {
 # This function generates test disks from provision.fmf
 # This is required by storage and snapshot roles
     local provisionfmf
     local -i i=0
     local disk_provisioner_dir TARGETCLI_CMD disks disk file
-    rolesGetRoleDir
+    lsrGetRoleDir
     provisionfmf="$role_path"/tests/provision.fmf
     if [ ! -f "$provisionfmf" ]; then
         rlRun "rm -rf ${role_path}"
@@ -496,7 +496,7 @@ rolesGenerateTestDisks() {
     [ -z "$disks" ] && return
 
     # disk_provisioner needs at least 10GB - if /tmp does not have enough space, use /var/tmp
-    if rolesCheckPartitionSize "/tmp" -gt 10485760; then
+    if lsrCheckPartitionSize "/tmp" -gt 10485760; then
         disk_provisioner_dir=$(mktemp --directory --tmpdir=/tmp)
     else
         disk_provisioner_dir=$(mktemp --directory --tmpdir=/var/tmp)
@@ -520,7 +520,7 @@ luns/ create /backstores/fileio/disk${i}"
     rlRun "rm -rf ${role_path}"
 }
 
-rolesMssqlHaUpdateInventory() {
+lsrMssqlHaUpdateInventory() {
     local inventory=$1
     declare -n node_types_arr="$2"
     rlRun "cat $inventory"
@@ -532,7 +532,7 @@ rolesMssqlHaUpdateInventory() {
 
 # prepare test playbooks for gathering information about python
 # module usage
-rolesSetupGetPythonModules() {
+lsrSetupGetPythonModules() {
     local tests_dir test_pb
     tests_dir="$1"; shift
     for test_pb in "$@"; do

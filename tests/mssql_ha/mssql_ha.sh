@@ -60,51 +60,51 @@ REQUIRED_VARS=("ANSIBLE_VER")
 rlJournalStart
     rlPhaseStartSetup
         rlRun "rlImport library"
-        rolesPrepTestVars
+        lsrPrepTestVars
         for required_var in "${REQUIRED_VARS[@]}"; do
             if [ -z "${!required_var}" ]; then
                 rlDie "This required variable is unset: $required_var "
             fi
         done
-        rolesInstallAnsible
-        rolesInstallYq
-        rolesGetRoleDir
-        # role_path is defined in rolesGetRoleDir
+        lsrInstallAnsible
+        lsrInstallYq
+        lsrGetRoleDir
+        # role_path is defined in lsrGetRoleDir
         # shellcheck disable=SC2154
-        test_playbooks=$(rolesGetTests "$role_path")
+        test_playbooks=$(lsrGetTests "$role_path")
         rlLogInfo "Test playbooks: $test_playbooks"
         if [ -z "$test_playbooks" ]; then
             rlDie "No test playbooks found"
         fi
         for test_playbook in $test_playbooks; do
-            rolesHandleVault "$role_path" "$test_playbook"
+            lsrHandleVault "$role_path" "$test_playbook"
         done
-        rolesGetCollectionPath
-        # role_path is defined in rolesGetRoleDir
+        lsrGetCollectionPath
+        # role_path is defined in lsrGetRoleDir
         # shellcheck disable=SC2154
-        rolesInstallDependencies "$role_path" "$collection_path"
-        rolesEnableCallbackPlugins "$collection_path"
-        rolesConvertToCollection "$role_path" "$collection_path"
-        # tmt_tree_provision and guests_yml is defined in rolesPrepTestVars
+        lsrInstallDependencies "$role_path" "$collection_path"
+        lsrEnableCallbackPlugins "$collection_path"
+        lsrConvertToCollection "$role_path" "$collection_path"
+        # tmt_tree_provision and guests_yml is defined in lsrPrepTestVars
         # shellcheck disable=SC2154
-        inventory_external=$(rolesPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
-        inventory_read_scale=$(rolesPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
+        inventory_external=$(lsrPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
+        inventory_read_scale=$(lsrPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
 
         declare -A external_node_types
         external_node_types[managed-node1]=primary
         external_node_types[managed-node2]=synchronous
-        # external_node_types is used below when calling rolesMssqlHaUpdateInventory
+        # external_node_types is used below when calling lsrMssqlHaUpdateInventory
         # shellcheck disable=SC2034
         external_node_types[managed-node3]=witness
         declare -A read_scale_node_types
         read_scale_node_types[managed-node1]=primary
         read_scale_node_types[managed-node2]=synchronous
-        # read_scale_node_types is used below when calling rolesMssqlHaUpdateInventory
+        # read_scale_node_types is used below when calling lsrMssqlHaUpdateInventory
         # shellcheck disable=SC2034
         read_scale_node_types[managed-node3]=asynchronous
 
-        rolesMssqlHaUpdateInventory "$inventory_external" external_node_types
-        rolesMssqlHaUpdateInventory "$inventory_read_scale" read_scale_node_types
+        lsrMssqlHaUpdateInventory "$inventory_external" external_node_types
+        lsrMssqlHaUpdateInventory "$inventory_read_scale" read_scale_node_types
 
         # Find the IP of the virtualip node that was shut down
         virtualip_name=$(yq -r ". | keys[] | select(test(\"virtualip\"))" "$guests_yml")
@@ -134,13 +134,13 @@ rlJournalStart
                 # Replace mssql_version value to one of the supported versions
                 sed -i "s/mssql_version.*$/mssql_version: $mssql_version/g" "$tests_path/$test_playbook"
                 rlRun "grep '^ *mssql_version:' $tests_path/$test_playbook"
-                # tmt_plan is assigned at rolesPrepTestVars
+                # tmt_plan is assigned at lsrPrepTestVars
                 # shellcheck disable=SC2154
                 LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"-"$tmt_plan"-"$mssql_version"
                 if [ "$test_playbook" = "tests_configure_ha_cluster_external.yml" ]; then
-                    rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory_external" "$SKIP_TAGS" "" "$LOGFILE"
+                    lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory_external" "$SKIP_TAGS" "" "$LOGFILE"
                 elif [ "$test_playbook" = "tests_configure_ha_cluster_read_scale.yml" ]; then
-                    rolesRunPlaybook "$tests_path" "$test_playbook" "$inventory_read_scale" "$SKIP_TAGS" "" "$LOGFILE"
+                    lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory_read_scale" "$SKIP_TAGS" "" "$LOGFILE"
                 fi
             done
         done

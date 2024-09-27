@@ -341,9 +341,12 @@ lsrUploadLogs() {
 
 lsrArrtoStr() {
     # Convert associative array into a space separated key=value list
-    declare -n arr="$1"
-    for k in "${!arr[@]}"; do
-        printf "%s=%s " "$k" "${arr[$k]@Q}"
+    eval "arr=(\${!$1[@]})"
+    # arr and val are defined above with eval
+    # shellcheck disable=SC2154
+    for k in "${arr[@]}"; do
+        eval "val=\${$1[$k]}"
+        printf "%s=%s " "$k" "$val"
     done
     echo
 }
@@ -522,10 +525,14 @@ luns/ create /backstores/fileio/disk${i}"
 
 lsrMssqlHaUpdateInventory() {
     local inventory=$1
-    declare -n node_types_arr="$2"
+    eval "arr=(\${!$2[@]})"
     rlRun "cat $inventory"
-    for i in "${!node_types_arr[@]}"; do
-        rlRun "yq -yi '.all.hosts.\"$i\" += {\"mssql_ha_replica_type\": \"${node_types_arr[$i]}\"}' $inventory"
+    # cat "$inventory"
+    # arr and val are defined above with eval
+    # shellcheck disable=SC2154
+    for k in "${arr[@]}"; do
+        eval "val=\${$2[$k]}"
+        yq -yi ".all.hosts.\"$k\" += {\"mssql_ha_replica_type\": \"$val\"}" "$inventory"
     done
     rlRun "cat $inventory"
 }

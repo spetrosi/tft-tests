@@ -79,9 +79,8 @@ lsrGetRoleDir() {
 }
 
 lsrGetTests() {
-    local role_path=$1
+    local tests_path=$1
     local test_playbooks_all test_playbooks
-    tests_path="$role_path"/tests/
     test_playbooks_all=$(find "$tests_path" -maxdepth 1 -type f -name "tests_*.yml" -printf '%f\n')
     if [ -n "$SYSTEM_ROLES_ONLY_TESTS" ]; then
         for test_playbook in $test_playbooks_all; do
@@ -110,11 +109,11 @@ lsrGetTests() {
 
 # Handle Ansible Vault encrypted variables
 lsrHandleVault() {
-    local role_path=$1
-    local playbook_file=$role_path/tests/$2
-    local vault_pwd_file=$role_path/tests/vault_pwd
-    local vault_variables_file=$role_path/tests/vars/vault-variables.yml
-    local no_vault_file=$role_path/tests/no-vault-variables.txt
+    local tests_path=$1
+    local playbook_file=$tests_path/$2
+    local vault_pwd_file=$tests_path/vault_pwd
+    local vault_variables_file=$tests_path/vars/vault-variables.yml
+    local no_vault_file=$tests_path/no-vault-variables.txt
     local vault_play
 
     if [ ! -f "$vault_pwd_file" ] || [ ! -f "$vault_variables_file" ]; then
@@ -271,11 +270,10 @@ lsrGetControlNodeName() {
 }
 
 lsrPrepareInventoryVars() {
-    local role_path=$1
-    local tmt_tree_provision=$2
-    local guests_yml=$3
+    local tmt_tree_provision=$1
+    local guests_yml=$2
     local inventory is_virtual  managed_nodes
-    inventory=$(mktemp -p "$role_path" -t inventory-XXX.yml)
+    inventory=$(mktemp -t inventory-XXX.yml)
     # TMT_TOPOLOGY_ variables are not available in tmt try.
     # Reading topology from guests.yml for compatibility with tmt try
     is_virtual=$(lsrIsVirtual "$tmt_tree_provision")

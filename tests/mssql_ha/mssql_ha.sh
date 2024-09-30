@@ -77,7 +77,7 @@ rlJournalStart
             rlDie "No test playbooks found"
         fi
         for test_playbook in $test_playbooks; do
-            lsrHandleVault "$role_path" "$test_playbook"
+            lsrHandleVault "$role_path/tests" "$test_playbook"
         done
         lsrGetCollectionPath
         # role_path is defined in lsrGetRoleDir
@@ -87,8 +87,8 @@ rlJournalStart
         lsrConvertToCollection "$role_path" "$collection_path"
         # tmt_tree_provision and guests_yml is defined in lsrPrepTestVars
         # shellcheck disable=SC2154
-        inventory_external=$(lsrPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
-        inventory_read_scale=$(lsrPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
+        inventory_external=$(lsrPrepareInventoryVars "$tmt_tree_provision" "$guests_yml")
+        inventory_read_scale=$(lsrPrepareInventoryVars "$tmt_tree_provision" "$guests_yml")
 
         declare -A external_node_types
         external_node_types[managed-node1]=primary

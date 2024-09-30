@@ -256,17 +256,24 @@ lsrConvertToCollection() {
 
 lsrGetManagedNodes() {
     local guests_yml=$1
-    yq -r ". | keys[] | select(test(\"managed*\"))" "$guests_yml" | sort
+    sed --quiet --regexp-extended 's/(^managed.*):/\1/p' "$guests_yml" | sort
 }
 
 lsrGetNodes() {
     local guests_yml=$1
-    yq -r ". | keys[]" "$guests_yml" | sort
+    sed --quiet --regexp-extended 's/(^[^ ]*):/\1/p' "$guests_yml" | sort
 }
 
 lsrGetControlNodeName() {
     local guests_yml=$1
-    yq -r ". | keys[] | select(test(\"control*\"))" "$guests_yml"
+    sed --quiet --regexp-extended 's/(^control.*):/\1/p' "$guests_yml"
+}
+
+lsrGetCurrNodeHostname() {
+    local guests_yml=$1
+    local ip_addr
+    ip_addr=$(hostname -I | awk '{print $1}')
+    grep "primary-address: $ip_addr" "$guests_yml" -B 10 | sed --quiet --regexp-extended 's/(^[^ ]*):/\1/p'
 }
 
 lsrPrepareInventoryVars() {
@@ -416,13 +423,6 @@ lsrRunPlaybooksParallel() {
     done
 }
 
-lsrCS8InstallPython() {
-    # Install python on managed node when running CS8 with ansible!=2.9
-    if [ "$ANSIBLE_VER" != "2.9" ] && grep -q 'CentOS Stream release 8' /etc/redhat-release; then
-        rlRun "dnf install -y python$PYTHON_VERSION"
-    fi
-}
-
 lsrDistributeSSHKeys() {
     # name: Distribute SSH keys when provisioned with how=virtual
     local tmt_tree_provision=$1
@@ -436,8 +436,7 @@ lsrDistributeSSHKeys() {
 
 lsrSetHostname() {
     local guests_yml=$1
-    ip_addr=$(hostname -I | awk '{print $1}')
-    hostname=$(yq -r "to_entries | .[] | select(.value.\"primary-address\" == \"$ip_addr\") | .key" "$guests_yml")
+    hostname=$(lsrGetCurrNodeHostname "$guests_yml")
     rlRun "hostnamectl set-hostname $hostname"
 }
 
@@ -445,7 +444,8 @@ lsrBuildEtcHosts() {
     local guests_yml=$1
     managed_nodes=$(lsrGetManagedNodes "$guests_yml")
     for managed_node in $managed_nodes; do
-        managed_node_ip=$(yq -r ".\"$managed_node\".\"primary-address\"" "$guests_yml")
+        # awk '$1=$1' to remove extra spaces
+        managed_node_ip=$(grep "$managed_node:" "$guests_yml" -A 5 | sed --quiet --regexp-extended 's/primary-address: (.*)/\1/p' | awk '$1=$1')
         echo "$managed_node_ip" "$managed_node" >> /etc/hosts
     done
     rlRun "cat /etc/hosts"

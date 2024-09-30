@@ -25,8 +25,6 @@ rlJournalStart
                 rlDie "This required variable is unset: $required_var "
             fi
         done
-        lsrCS8InstallPython
-        lsrInstallYq
         # tmt_tree_provision is defined in lsrPrepTestVars
         # shellcheck disable=SC2154
         lsrDistributeSSHKeys "$tmt_tree_provision"

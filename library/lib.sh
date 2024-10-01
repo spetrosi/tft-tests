@@ -109,8 +109,9 @@ lsrGetTests() {
 
 # Handle Ansible Vault encrypted variables
 lsrHandleVault() {
-    local tests_path=$1
-    local playbook_file=$tests_path/$2
+    local playbook_file=$1
+    local tests_path
+    tests_path=$(dirname "$playbook_file")
     local vault_pwd_file=$tests_path/vault_pwd
     local vault_variables_file=$tests_path/vars/vault-variables.yml
     local no_vault_file=$tests_path/no-vault-variables.txt

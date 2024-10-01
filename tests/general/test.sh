@@ -76,7 +76,7 @@ rlJournalStart
             rlDie "No test playbooks found"
         fi
         for test_playbook in $test_playbooks; do
-            lsrHandleVault "$role_path/tests" "$test_playbook"
+            lsrHandleVault "$role_path/tests/$test_playbook"
         done
         lsrGetCollectionPath
         # collection_path and guests_yml is defined in lsrGetCollectionPath

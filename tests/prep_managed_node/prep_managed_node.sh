@@ -34,6 +34,5 @@ rlJournalStart
         lsrBuildEtcHosts "$guests_yml"
         lsrEnableHA
         lsrDisableNFV
-        lsrGenerateTestDisks "$REPO_NAME"
     rlPhaseEnd
 rlJournalEnd

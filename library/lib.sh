@@ -280,6 +280,19 @@ lsrGetCurrNodeHostname() {
     grep "primary-address: $ip_addr" "$guests_yml" -B 10 | sed --quiet --regexp-extended 's/(^[^ ]*):/\1/p'
 }
 
+lsrGetNodeIp() {
+    local guests_yml=$1
+    local node=$2
+    # awk '$1=$1' to remove extra spaces
+    grep "$node:" "$guests_yml" -A 5 | sed --quiet --regexp-extended 's/primary-address: (.*)/\1/p' | awk '$1=$1'
+}
+
+lsrGetNodeKey() {
+    local guests_yml=$1
+    local node=$2
+    sed -n "/$node\:/,/^[^ ]/p" "$guests_yml"  | grep 'key\:' -A1 | tail -n1 | grep -o '/.*'
+}
+
 lsrPrepareInventoryVars() {
     local tmt_tree_provision=$1
     local guests_yml=$2
@@ -435,6 +448,7 @@ lsrDistributeSSHKeys() {
     local tmt_tree_provision=$1
     local control_node_id_ecdsa_pub control_node_name
     control_node_name=$(lsrGetControlNodeName "$guests_yml")
+
     control_node_id_ecdsa_pub=$tmt_tree_provision/$control_node_name/id_ecdsa.pub
     if [ -f "$control_node_id_ecdsa_pub" ]; then
         rlRun "cat $control_node_id_ecdsa_pub >> ~/.ssh/authorized_keys"
@@ -451,8 +465,7 @@ lsrBuildEtcHosts() {
     local guests_yml=$1
     managed_nodes=$(lsrGetManagedNodes "$guests_yml")
     for managed_node in $managed_nodes; do
-        # awk '$1=$1' to remove extra spaces
-        managed_node_ip=$(grep "$managed_node:" "$guests_yml" -A 5 | sed --quiet --regexp-extended 's/primary-address: (.*)/\1/p' | awk '$1=$1')
+        managed_node_ip=$(lsrGetNodeIp "$guests_yml" "$managed_node")
         echo "$managed_node_ip" "$managed_node" >> /etc/hosts
     done
     rlRun "cat /etc/hosts"
@@ -482,52 +495,56 @@ lsrDisableNFV() {
     fi
 }
 
+lsrDiskProvisionerRequired() {
+# check if the test requires additional disk devices
+# to be provisioned
+    local tests_path=$1
+    local provision_fmf="$tests_path/provision.fmf"
+    if grep -q "drive:" "$provision_fmf" 2> /dev/null; then
+        return 0
+    fi
+    return 1
+}
+
+lsrCheckPartitionSize() {
+    local file_or_dir="$1"
+    local op="$2"
+    local size="$3"  # in kb - like df -k
+    local available
+    available=$(df -k "$file_or_dir" --output=avail | tail -1)
+    test "$available" "$op" "$size"
+}
+
 lsrGenerateTestDisks() {
-# This function generates test disks from provision.fmf
-# This is required by storage and snapshot roles
-    local repo_name=$1
-    local provisionfmf
-    local -i i=0
-    local disk_provisioner_dir TARGETCLI_CMD disks disk file
-    lsrGetRoleDir "$repo_name"
-    provisionfmf="$role_path"/tests/provision.fmf
-    if [ ! -f "$provisionfmf" ]; then
-        rlRun "rm -rf ${role_path}"
-        return
+    local tests_path=$1
+    local provisionfmf="$tests_path"/provision.fmf
+    local disk_provisioner_script=disk_provisioner.sh
+    local disk_provisioner_dir
+    if ! rolesDiskProvisionerRequired "$tests_path"; then
+        return 0
     fi
-    if ! grep -q drive: "$provisionfmf"; then
-        rlRun "rm -rf ${role_path}"
-        return
-    fi
-    rlRun "yum install targetcli -y"
-    disks=$(sed -rn 's/^\s*-?\s+size:\s+(.*)/\1/p' "$provisionfmf")
-    # Nothing to do
-    [ -z "$disks" ] && return
 
     # disk_provisioner needs at least 10GB - if /tmp does not have enough space, use /var/tmp
     if lsrCheckPartitionSize "/tmp" -gt 10485760; then
-        disk_provisioner_dir=$(mktemp --directory --tmpdir=/tmp)
+        disk_provisioner_dir=/tmp/disk_provisioner
     else
-        disk_provisioner_dir=$(mktemp --directory --tmpdir=/var/tmp)
+        disk_provisioner_dir=/var/tmp/disk_provisioner
     fi
+    managed_nodes=$(lsrGetManagedNodes "$guests_yml")
+    control_node_name=$(lsrGetControlNodeName "$guests_yml")
+    control_node_id_ecdsa=$(lsrGetNodeKey "$guests_yml" "$control_node_name")
 
-    TARGETCLI_CMD="set global auto_cd_after_create=true
-/loopback create
-set global auto_cd_after_create=false"
-
-    for disk in $disks; do
-        file="${disk_provisioner_dir}/disk${i}"
-        rlRun "truncate -s $disk $file"
-		TARGETCLI_CMD="${TARGETCLI_CMD}
-/backstores/fileio create disk${i} ${file}
-luns/ create /backstores/fileio/disk${i}"
-        ((++i))
+    for managed_node in $managed_nodes; do
+        managed_node_ip=$(lsrGetNodeIp "$guests_yml" "$managed_node")
+        rlRun "scp -o StrictHostKeyChecking=no -i $control_node_id_ecdsa $disk_provisioner_script $provisionfmf root@$managed_node_ip:/tmp/"
+        ssh_cmd="ssh -o StrictHostKeyChecking=no -i $control_node_id_ecdsa root@$managed_node_ip"
+        rlRun "$ssh_cmd \"WORK_DIR=$disk_provisioner_dir FMF_DIR=/tmp/ /tmp/$disk_provisioner_script start\""
+        # Ensure that a new devices really exists
+        rlRun "$ssh_cmd \"fdisk -l | grep 'Disk /dev/'\""
+        rlRun "$ssh_cmd \"lsblk -l | cut -d\  -f1 | grep -v NAME | sed 's/^/\/dev\//' | xargs ls -l\""
     done
-    targetcli <<< "$TARGETCLI_CMD"
-
-    rlRun "rm -rf ${disk_provisioner_dir}"
-    rlRun "rm -rf ${role_path}"
 }
+
 
 lsrMssqlHaUpdateInventory() {
     local inventory=$1

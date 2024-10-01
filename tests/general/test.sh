@@ -70,6 +70,7 @@ rlJournalStart
         lsrGetRoleDir "$REPO_NAME"
         # role_path is defined in lsrGetRoleDir
         # shellcheck disable=SC2154
+        lsrGenerateTestDisks "$role_path"/tests
         test_playbooks=$(lsrGetTests "$role_path"/tests)
         rlLogInfo "Test playbooks: $test_playbooks"
         if [ -z "$test_playbooks" ]; then

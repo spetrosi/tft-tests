@@ -68,7 +68,7 @@ rlJournalStart
         done
         lsrInstallAnsible
         lsrInstallYq
-        lsrGetRoleDir
+        lsrGetRoleDir "$REPO_NAME"
         # role_path is defined in lsrGetRoleDir
         # shellcheck disable=SC2154
         test_playbooks=$(lsrGetTests "$role_path")
@@ -84,7 +84,7 @@ rlJournalStart
         # shellcheck disable=SC2154
         lsrInstallDependencies "$role_path" "$collection_path"
         lsrEnableCallbackPlugins "$collection_path"
-        lsrConvertToCollection "$role_path" "$collection_path"
+        lsrConvertToCollection "$role_path" "$collection_path" "$REPO_NAME"
         # tmt_tree_provision and guests_yml is defined in lsrPrepTestVars
         # shellcheck disable=SC2154
         inventory_external=$(lsrPrepareInventoryVars "$tmt_tree_provision" "$guests_yml")
@@ -138,9 +138,9 @@ rlJournalStart
                 # shellcheck disable=SC2154
                 LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"-"$tmt_plan"-"$mssql_version"
                 if [ "$test_playbook" = "tests_configure_ha_cluster_external.yml" ]; then
-                    lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory_external" "$SKIP_TAGS" "" "$LOGFILE"
+                    lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory_external" "$SKIP_TAGS" "" "$LOGFILE" "$REPO_NAME"
                 elif [ "$test_playbook" = "tests_configure_ha_cluster_read_scale.yml" ]; then
-                    lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory_read_scale" "$SKIP_TAGS" "" "$LOGFILE"
+                    lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory_read_scale" "$SKIP_TAGS" "" "$LOGFILE" "$REPO_NAME"
                 fi
             done
         done

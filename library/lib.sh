@@ -55,7 +55,8 @@ lsrInstallYq() {
 
 lsrCloneRepo() {
     local role_path=$1
-    rlRun "git clone -q https://github.com/$GITHUB_ORG/$REPO_NAME.git $role_path --depth 1"
+    local repo_name=$2
+    rlRun "git clone -q https://github.com/$GITHUB_ORG/$repo_name.git $role_path --depth 1"
     if [ -n "$PR_NUM" ]; then
         # git on EL7 doesn't support -C option
         pushd "$role_path" || exit
@@ -69,12 +70,13 @@ lsrCloneRepo() {
 }
 
 lsrGetRoleDir() {
+    local repo_name=$1
     if [ "$TEST_LOCAL_CHANGES" == true ] || [ "$TEST_LOCAL_CHANGES" == True ]; then
         rlLog "Test from local changes"
         role_path="$TMT_TREE"
     else
-        role_path=$(mktemp --directory -t "$REPO_NAME"-XXX)
-        lsrCloneRepo "$role_path"
+        role_path=$(mktemp --directory -t "$repo_name"-XXX)
+        lsrCloneRepo "$role_path" "$repo_name"
     fi
 }
 
@@ -214,10 +216,11 @@ lsrEnableCallbackPlugins() {
 lsrConvertToCollection() {
     local role_path=$1
     local collection_path=$2
+    local role_name=$3
     local collection_script_url=https://raw.githubusercontent.com/linux-system-roles/auto-maintenance/main
     local coll_namespace=fedora
     local coll_name=linux_system_roles
-    local subrole_prefix=private_"$REPO_NAME"_subrole_
+    local subrole_prefix=private_"$role_name"_subrole_
     local tmpdir=/tmp/lsr_role2collection
     local lsr_role2collection=$tmpdir/lsr_role2collection.py
     local runtime=$tmpdir/runtime.yml
@@ -231,23 +234,23 @@ lsrConvertToCollection() {
         rlRun "curl -L -o $runtime $collection_script_url/lsr_role2collection/runtime.yml"
     fi
     # Remove role that was installed as a dependency
-    rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
+    rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$role_name"
     # Remove performancecopilot vendored by metrics. It will be generated during a conversion to collection.
-    if [ "$REPO_NAME" = "metrics" ]; then
+    if [ "$role_name" = "metrics" ]; then
         rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/vendor/github.com/performancecopilot/ansible-pcp"
     fi
     rlRun "python$PYTHON_VERSION -m pip install ruamel-yaml"
     # Remove symlinks in tests/roles
     if [ -d "$role_path"/tests/roles ]; then
         find "$role_path"/tests/roles -type l -exec rm {} \;
-        if [ -d "$role_path"/tests/roles/linux-system-roles."$REPO_NAME" ]; then
-            rlRun "rm -r $role_path/tests/roles/linux-system-roles.$REPO_NAME"
+        if [ -d "$role_path"/tests/roles/linux-system-roles."$role_name" ]; then
+            rlRun "rm -r $role_path/tests/roles/linux-system-roles.$role_name"
         fi
     fi
     rlRun "python$PYTHON_VERSION $lsr_role2collection \
 --meta-runtime $runtime \
 --src-owner linux-system-roles \
---role $REPO_NAME \
+--role $role_name \
 --src-path $role_path \
 --dest-path $collection_path \
 --namespace $coll_namespace \
@@ -314,6 +317,7 @@ lsrIsVirtual() {
 lsrUploadLogs() {
     local logfile=$1
     local guests_yml=$2
+    local role_name=$3
     local id_rsa_path pr_substr os artifact_dirname target_dir
     rlFileSubmit "$logfile"
     if [ -z "$LINUXSYSTEMROLES_SSH_KEY" ]; then
@@ -333,7 +337,7 @@ lsrUploadLogs() {
         else
             pr_substr=_$PR_NUM
         fi
-        artifact_dirname=tmt-"$REPO_NAME""$pr_substr"_"$os"_"$date"/artifacts
+        artifact_dirname=tmt-"$role_name""$pr_substr"_"$os"_"$date"/artifacts
         target_dir="/srv/pub/alt/linuxsystemroles/logs"
         ARTIFACTS_DIR="$target_dir"/"$artifact_dirname"
         ARTIFACTS_URL=https://dl.fedoraproject.org/pub/alt/linuxsystemroles/logs/$artifact_dirname/
@@ -364,6 +368,7 @@ lsrRunPlaybook() {
     local skip_tags=$4
     local limit=$5
     local LOGFILE=$6
+    local role_name=$7
     local result=FAIL
     local cmd log_msg
     local ans_debug=""
@@ -381,13 +386,13 @@ lsrRunPlaybook() {
     logfile_name=$LOGFILE-$result.log
     mv "$LOGFILE" "$logfile_name"
     LOGFILE=$logfile_name
-    lsrUploadLogs "$LOGFILE" "$guests_yml"
+    lsrUploadLogs "$LOGFILE" "$guests_yml" "$role_name"
     if [ "${GET_PYTHON_MODULES:-}" = true ]; then
         cmd="$(lsrArrtoStr ANSIBLE_ENVS) ansible-playbook -i $inventory $skip_tags $limit process_python_modules_packages.yml -vv"
         local packages="$LOGFILE.packages"
         rlRun "$cmd -e packages_file=$packages -e logfile=$LOGFILE &> $LOGFILE.modules" 0 "process python modules"
-        lsrUploadLogs "$LOGFILE.modules" "$guests_yml"
-        lsrUploadLogs "$packages" "$guests_yml"
+        lsrUploadLogs "$LOGFILE.modules" "$guests_yml" "$role_name"
+        lsrUploadLogs "$packages" "$guests_yml" "$role_name"
     fi
 }
 
@@ -399,6 +404,7 @@ lsrRunPlaybooksParallel() {
     local skip_tags=$3
     local test_playbooks=$4
     local managed_nodes=$5
+    local role_name=$6
     local test_playbooks_arr
 
     read -ra test_playbooks_arr <<< "$test_playbooks"
@@ -408,7 +414,7 @@ lsrRunPlaybooksParallel() {
                 test_playbook=${test_playbooks_arr[0]}
                 test_playbooks_arr=("${test_playbooks_arr[@]:1}") # Remove first element from array
                 LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"-$tmt_plan
-                lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$skip_tags" "--limit $managed_node" "$LOGFILE" &
+                lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$skip_tags" "--limit $managed_node" "$LOGFILE" "$role_name" &
                 sleep 1
                 break
             fi
@@ -479,10 +485,11 @@ lsrDisableNFV() {
 lsrGenerateTestDisks() {
 # This function generates test disks from provision.fmf
 # This is required by storage and snapshot roles
+    local repo_name=$1
     local provisionfmf
     local -i i=0
     local disk_provisioner_dir TARGETCLI_CMD disks disk file
-    lsrGetRoleDir
+    lsrGetRoleDir "$repo_name"
     provisionfmf="$role_path"/tests/provision.fmf
     if [ ! -f "$provisionfmf" ]; then
         rlRun "rm -rf ${role_path}"

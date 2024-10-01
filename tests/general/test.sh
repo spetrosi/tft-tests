@@ -67,7 +67,7 @@ rlJournalStart
             # does not work with 2.9
             GET_PYTHON_MODULES=false
         fi
-        lsrGetRoleDir
+        lsrGetRoleDir "$REPO_NAME"
         # role_path is defined in lsrGetRoleDir
         # shellcheck disable=SC2154
         test_playbooks=$(lsrGetTests "$role_path"/tests)
@@ -83,7 +83,7 @@ rlJournalStart
         # shellcheck disable=SC2154
         lsrInstallDependencies "$role_path" "$collection_path"
         lsrEnableCallbackPlugins "$collection_path"
-        lsrConvertToCollection "$role_path" "$collection_path"
+        lsrConvertToCollection "$role_path" "$collection_path" "$REPO_NAME"
         # tmt_tree_provision and guests_yml is defined in lsrPrepTestVars
         # shellcheck disable=SC2154
         inventory=$(lsrPrepareInventoryVars "$tmt_tree_provision" "$guests_yml")

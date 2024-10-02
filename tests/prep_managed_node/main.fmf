@@ -1,8 +1,7 @@
 summary: Prepare managed node
 framework: beakerlib
 test: ./prep_managed_node.sh
-duration: 15m
+duration: 10m
 tag: prep_managed_node
 require:
     - beakerlib
-    - git

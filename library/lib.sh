@@ -446,12 +446,12 @@ lsrRunPlaybooksParallel() {
 lsrDistributeSSHKeys() {
     # name: Distribute SSH keys when provisioned with how=virtual
     local tmt_tree_provision=$1
-    local control_node_id_ecdsa_pub control_node_name
+    local control_node_key_pub control_node_name
     control_node_name=$(lsrGetControlNodeName "$guests_yml")
 
-    control_node_id_ecdsa_pub=$tmt_tree_provision/$control_node_name/id_ecdsa.pub
-    if [ -f "$control_node_id_ecdsa_pub" ]; then
-        rlRun "cat $control_node_id_ecdsa_pub >> ~/.ssh/authorized_keys"
+    control_node_key_pub=$tmt_tree_provision/$control_node_name/id_ecdsa.pub
+    if [ -f "$control_node_key_pub" ]; then
+        rlRun "cat $control_node_key_pub >> ~/.ssh/authorized_keys"
     fi
 }
 
@@ -534,12 +534,12 @@ lsrGenerateTestDisks() {
     fi
     managed_nodes=$(lsrGetManagedNodes "$guests_yml")
     control_node_name=$(lsrGetControlNodeName "$guests_yml")
-    control_node_id_ecdsa=$(lsrGetNodeKey "$guests_yml" "$control_node_name")
+    control_node_key=$(lsrGetNodeKey "$guests_yml" "$control_node_name")
 
     for managed_node in $managed_nodes; do
         managed_node_ip=$(lsrGetNodeIp "$guests_yml" "$managed_node")
-        rlRun "scp -o StrictHostKeyChecking=no -i $control_node_id_ecdsa $disk_provisioner_script $provisionfmf root@$managed_node_ip:/tmp/"
-        ssh_cmd="ssh -o StrictHostKeyChecking=no -i $control_node_id_ecdsa root@$managed_node_ip"
+        rlRun "scp -o StrictHostKeyChecking=no -i $control_node_key $disk_provisioner_script $provisionfmf root@$managed_node_ip:/tmp/"
+        ssh_cmd="ssh -o StrictHostKeyChecking=no -i $control_node_key root@$managed_node_ip"
         rlRun "$ssh_cmd \"WORK_DIR=$disk_provisioner_dir FMF_DIR=/tmp/ /tmp/$disk_provisioner_script start\""
         # Ensure that a new devices really exists
         rlRun "$ssh_cmd \"fdisk -l | grep 'Disk /dev/'\""

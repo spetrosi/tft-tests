@@ -466,7 +466,9 @@ lsrBuildEtcHosts() {
     managed_nodes=$(lsrGetManagedNodes "$guests_yml")
     for managed_node in $managed_nodes; do
         managed_node_ip=$(lsrGetNodeIp "$guests_yml" "$managed_node")
-        echo "$managed_node_ip" "$managed_node" >> /etc/hosts
+        if ! grep -q "$managed_node_ip $managed_node" /etc/hosts; then
+            rlRun "echo $managed_node_ip $managed_node >> /etc/hosts"
+        fi
     done
     rlRun "cat /etc/hosts"
 }

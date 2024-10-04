@@ -263,9 +263,10 @@ lsrGetNodes() {
     sed --quiet --regexp-extended 's/(^[^ ]*):/\1/p' "$guests_yml" | sort
 }
 
-lsrGetControlNodeName() {
+lsrGetNodeName() {
     local guests_yml=$1
-    sed --quiet --regexp-extended 's/(^control.*):/\1/p' "$guests_yml"
+    local node_pat=$2
+    sed --quiet --regexp-extended "s/(^$node_pat.*):/\1/p" "$guests_yml"
 }
 
 lsrGetCurrNodeHostname() {
@@ -292,7 +293,7 @@ lsrGetNodeKeyPrivate() {
     local guests_yml=$1
     local node=$2
     # Key is a list containing SSH keys, the first key is private
-    sed --quiet "/$node\:/,/^[^ ]/p" "$guests_yml"  | grep 'key\:' -A1 | tail -n1 | grep -o '/.*'
+    sed --quiet "/^$node\:/,/^[^ ]/p" "$guests_yml"  | grep 'key\:' -A1 | tail -n1 | grep -o '/.*'
 }
 
 lsrGetNodeKeyPublic() {
@@ -311,7 +312,7 @@ lsrPrepareInventoryVars() {
     # Reading topology from guests.yml for compatibility with tmt try
     is_virtual=$(lsrIsVirtual "$tmt_tree_provision")
     managed_nodes=$(lsrGetManagedNodes "$guests_yml")
-    control_node_name=$(lsrGetControlNodeName "$guests_yml")
+    control_node_name=$(lsrGetNodeName "$guests_yml" "control-node")
     echo "---
 all:
   hosts:" > "$inventory"
@@ -351,7 +352,7 @@ lsrUploadLogs() {
         -e 's| -----END OPENSSH PRIVATE KEY-----|\n-----END OPENSSH PRIVATE KEY-----|' > "$id_rsa_path" # notsecret
     chmod 600 "$id_rsa_path"
     if [ -z "$ARTIFACTS_DIR" ]; then
-        control_node_name=$(lsrGetControlNodeName "$guests_yml")
+        control_node_name=$(lsrGetNodeName "$guests_yml" "control-node")
         os=$(lsrGetNodeOs "$guests_yml" "$control_node_name")
         printf -v date '%(%Y%m%d-%H%M%S)T' -1
         if [ -z "$PR_NUM" ]; then
@@ -455,9 +456,10 @@ lsrRunPlaybooksParallel() {
 lsrDistributeSSHKeys() {
     local tmt_tree_provision=$1
     local control_node_key_pub control_node_name
-    control_node_name=$(lsrGetControlNodeName "$guests_yml")
-    control_node_key_pub=$(lsrGetNodeKeyPublic "$guests_yml" "$node")
-    if [ -f "$control_node_key_pub" ]; then
+    control_node_name=$(lsrGetNodeName "$guests_yml" "control-node")
+    control_node_key_pub=$(lsrGetNodeKeyPublic "$guests_yml" "$control_node_name")
+    control_node_key_pub_content=$(cat "$control_node_key_pub")
+    if [ -f "$control_node_key_pub" ] && ! grep "$control_node_key_pub_content" ~/.ssh/authorized_keys; then
         rlRun "cat $control_node_key_pub >> ~/.ssh/authorized_keys"
     fi
 }
@@ -529,7 +531,7 @@ lsrGenerateTestDisks() {
     local provisionfmf="$tests_path"/provision.fmf
     local disk_provisioner_script=disk_provisioner.sh
     local disk_provisioner_dir
-    if ! rolesDiskProvisionerRequired "$tests_path"; then
+    if ! lsrDiskProvisionerRequired "$tests_path"; then
         return 0
     fi
 
@@ -540,13 +542,13 @@ lsrGenerateTestDisks() {
         disk_provisioner_dir=/var/tmp/disk_provisioner
     fi
     managed_nodes=$(lsrGetManagedNodes "$guests_yml")
-    control_node_name=$(lsrGetControlNodeName "$guests_yml")
-    control_node_key=$(lsrGetNodeKey "$guests_yml" "$control_node_name")
+    control_node_name=$(lsrGetNodeName "$guests_yml" "control-node")
+    control_node_key=$(lsrGetNodeKeyPrivate "$guests_yml" "$control_node_name")
 
     for managed_node in $managed_nodes; do
-        managed_node_ip=$(lsrGetNodeIp "$guests_yml" "$managed_node")
-        rlRun "scp -o StrictHostKeyChecking=no -i $control_node_key $disk_provisioner_script $provisionfmf root@$managed_node_ip:/tmp/"
-        ssh_cmd="ssh -o StrictHostKeyChecking=no -i $control_node_key root@$managed_node_ip"
+        node_ip=$(lsrGetNodeIp "$guests_yml" "$managed_node")
+        rlRun "scp -o StrictHostKeyChecking=no -i $control_node_key $disk_provisioner_script $provisionfmf root@$node_ip:/tmp/"
+        ssh_cmd="ssh -o StrictHostKeyChecking=no -i $control_node_key root@$node_ip"
         rlRun "$ssh_cmd \"WORK_DIR=$disk_provisioner_dir FMF_DIR=/tmp/ /tmp/$disk_provisioner_script start\""
         # Ensure that a new devices really exists
         rlRun "$ssh_cmd \"fdisk -l | grep 'Disk /dev/'\""

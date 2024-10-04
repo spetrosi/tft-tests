@@ -373,13 +373,15 @@ lsrUploadLogs() {
 }
 
 lsrArrtoStr() {
+    local keys values key value
+    local arr_name=$1
     # Convert associative array into a space separated key=value list
-    eval "arr=(\${!$1[@]})"
-    # arr and val are defined above with eval
-    # shellcheck disable=SC2154
-    for k in "${arr[@]}"; do
-        eval "val=\${$1[$k]}"
-        printf "%s=%s " "$k" "$val"
+    eval "keys=(\${!$arr_name[@]})"
+    eval "values=(\${$arr_name[@]})"
+    for i in $(seq 0 $((${#keys[@]} - 1))); do
+        key="${keys[$i-1]}"
+        value="${values[$i-1]}"
+        printf "%s=%s " "$key" "$value"
     done
     echo
 }
@@ -557,15 +559,18 @@ lsrGenerateTestDisks() {
 }
 
 lsrMssqlHaUpdateInventory() {
+    local keys values key value
     local inventory=$1
-    eval "arr=(\${!$2[@]})"
+    local arr_name=$2
+    eval "keys=(\${!$arr_name[@]})"
+    eval "values=(\${$arr_name[@]})"
     rlRun "cat $inventory"
-    # cat "$inventory"
-    # arr and val are defined above with eval
-    # shellcheck disable=SC2154
-    for hostname in "${arr[@]}"; do
-        eval "val=\${$2[$k]}"
-        sed -i "/$hostname:/a\ \ \ \ \ \ mssql_ha_replica_type: $val" "$inventory"
+    for i in $(seq 0 $((${#keys[@]} - 1))); do
+        key="${keys[$i]}"
+        if grep "$key" "$inventory"; then
+            value="${values[$i]}"
+            rlRun "sed -i \"/$key:/a\ \ \ \ \ \ mssql_ha_replica_type: $value\" $inventory"
+        fi
     done
     rlRun "cat $inventory"
 }

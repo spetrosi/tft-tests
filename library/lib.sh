@@ -48,11 +48,6 @@ lsrInstallAnsible() {
     fi
 }
 
-lsrInstallYq() {
-    rlRun "yum install python3-pip -y"
-    rlRun "python3 -m pip install yq"
-}
-
 lsrCloneRepo() {
     local role_path=$1
     local repo_name=$2
@@ -284,13 +279,27 @@ lsrGetNodeIp() {
     local guests_yml=$1
     local node=$2
     # awk '$1=$1' to remove extra spaces
-    grep "$node:" "$guests_yml" -A 5 | sed --quiet --regexp-extended 's/primary-address: (.*)/\1/p' | awk '$1=$1'
+    sed --quiet "/$node\:/,/^[^ ]/p" "$guests_yml"  | sed --quiet --regexp-extended 's/primary-address: (.*)/\1/p' | awk '$1=$1'
 }
 
-lsrGetNodeKey() {
+lsrGetNodeOs() {
     local guests_yml=$1
     local node=$2
-    sed -n "/$node\:/,/^[^ ]/p" "$guests_yml"  | grep 'key\:' -A1 | tail -n1 | grep -o '/.*'
+    sed --quiet "/$node\:/,/^[^ ]/p" "$guests_yml" | sed --quiet --regexp-extended 's/distro\: (.*)/\1/p' | awk '$1=$1'
+}
+
+lsrGetNodeKeyPrivate() {
+    local guests_yml=$1
+    local node=$2
+    # Key is a list containing SSH keys, the first key is private
+    sed --quiet "/$node\:/,/^[^ ]/p" "$guests_yml"  | grep 'key\:' -A1 | tail -n1 | grep -o '/.*'
+}
+
+lsrGetNodeKeyPublic() {
+    local guests_yml=$1
+    local node=$2
+    # Append .pub to the private key
+    lsrGetNodeKeyPrivate "$guests_yml" "$node" | awk '{print $1".pub"}'
 }
 
 lsrPrepareInventoryVars() {
@@ -307,7 +316,7 @@ lsrPrepareInventoryVars() {
 all:
   hosts:" > "$inventory"
     for managed_node in $managed_nodes; do
-        ip_addr=$(yq ".\"$managed_node\".\"primary-address\"" "$guests_yml")
+        ip_addr=$(lsrGetNodeIp "$guests_yml" "$managed_node")
         {
         echo "    $managed_node:"
         echo "      ansible_host: $ip_addr"
@@ -343,7 +352,7 @@ lsrUploadLogs() {
     chmod 600 "$id_rsa_path"
     if [ -z "$ARTIFACTS_DIR" ]; then
         control_node_name=$(lsrGetControlNodeName "$guests_yml")
-        os=$(yq -r ".\"$control_node_name\".facts.distro" "$guests_yml" | sed 's/ /_/g')
+        os=$(lsrGetNodeOs "$guests_yml" "$control_node_name")
         printf -v date '%(%Y%m%d-%H%M%S)T' -1
         if [ -z "$PR_NUM" ]; then
             pr_substr=_main
@@ -444,12 +453,10 @@ lsrRunPlaybooksParallel() {
 }
 
 lsrDistributeSSHKeys() {
-    # name: Distribute SSH keys when provisioned with how=virtual
     local tmt_tree_provision=$1
     local control_node_key_pub control_node_name
     control_node_name=$(lsrGetControlNodeName "$guests_yml")
-
-    control_node_key_pub=$tmt_tree_provision/$control_node_name/id_ecdsa.pub
+    control_node_key_pub=$(lsrGetNodeKeyPublic "$guests_yml" "$node")
     if [ -f "$control_node_key_pub" ]; then
         rlRun "cat $control_node_key_pub >> ~/.ssh/authorized_keys"
     fi
@@ -547,7 +554,6 @@ lsrGenerateTestDisks() {
     done
 }
 
-
 lsrMssqlHaUpdateInventory() {
     local inventory=$1
     eval "arr=(\${!$2[@]})"
@@ -555,9 +561,9 @@ lsrMssqlHaUpdateInventory() {
     # cat "$inventory"
     # arr and val are defined above with eval
     # shellcheck disable=SC2154
-    for k in "${arr[@]}"; do
+    for hostname in "${arr[@]}"; do
         eval "val=\${$2[$k]}"
-        yq -yi ".all.hosts.\"$k\" += {\"mssql_ha_replica_type\": \"$val\"}" "$inventory"
+        sed -i "/$hostname:/a\ \ \ \ \ \ mssql_ha_replica_type: $val" "$inventory"
     done
     rlRun "cat $inventory"
 }

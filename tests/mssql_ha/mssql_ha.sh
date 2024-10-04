@@ -67,7 +67,6 @@ rlJournalStart
             fi
         done
         lsrInstallAnsible
-        lsrInstallYq
         lsrGetRoleDir "$REPO_NAME"
         # role_path is defined in lsrGetRoleDir
         # shellcheck disable=SC2154
@@ -107,8 +106,8 @@ rlJournalStart
         lsrMssqlHaUpdateInventory "$inventory_read_scale" read_scale_node_types
 
         # Find the IP of the virtualip node that was shut down
-        virtualip_name=$(yq -r ". | keys[] | select(test(\"virtualip\"))" "$guests_yml")
-        virtualip=$(yq -r ".[\"$virtualip_name\"].\"primary-address\"" "$guests_yml")
+        virtualip_name=$(sed --quiet --regexp-extended 's/^(virtualip.*):/\1/p' "$guests_yml")
+        virtualip=$(lsrGetNodeIp "$guests_yml" "$virtualip_name")
         # Shut down virtualip if it's pingable
         if ping -c1 "$virtualip"; then
             rlRun "ssh -i $tmt_tree_provision/$virtualip_name/id_ecdsa root@$virtualip -oStrictHostKeyChecking=no shutdown"
@@ -121,12 +120,12 @@ rlJournalStart
         rlRun "grep '^ *mssql_ha_virtual_ip' $tests_path/tests_configure_ha_cluster_external.yml"
     rlPhaseEnd
     rlPhaseStartTest
-        os_ver=$(yq -r '."managed-node1".facts."os-release-content".VERSION' "$guests_yml" | sed 's/ /_/g')
+        os_ver=$(sed --quiet "/managed-node1\:/,/^[^ ]/p" "$guests_yml" | sed --quiet --regexp-extended 's/^[ ]*VERSION\: (.*)/\1/p' | sed "s/'//g" | sed 's/ /_/g')
         vars_file_name=CentOS_$os_ver.yml
         # Set supported versions from vars files, first from RedHat.yml, then from OS's file
         for var_file in "$collection_vars_path"/RedHat.yml "$collection_vars_path"/"$vars_file_name"; do
             if [ -f "$var_file" ]; then
-                supported_versions=$(yq '."__mssql_supported_versions"[]' "$var_file")
+                supported_versions=$(sed --quiet "/__mssql_supported_versions\:/,/^[^ ]/p" "$var_file" | grep -o '[0-9]*')
             fi
         done
         for test_playbook in $test_playbooks; do

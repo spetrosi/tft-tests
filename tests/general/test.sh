@@ -62,7 +62,6 @@ rlJournalStart
             fi
         done
         lsrInstallAnsible
-        lsrInstallYq
         if [ "${ANSIBLE_VER:-}" = 2.9 ]; then
             # does not work with 2.9
             GET_PYTHON_MODULES=false

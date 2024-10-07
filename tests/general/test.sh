@@ -47,6 +47,11 @@ if [ "$(echo "$SYSTEM_ROLES_ONLY_TESTS" | wc -w)" -eq 1 ]; then
 else
     LSR_TFT_DEBUG="${LSR_TFT_DEBUG:-false}"
 fi
+# ANSIBLE_GATHERING
+#   Use this to set value for the ANSIBLE_GATHERING environmental variable for ansible-playbook.
+#   Choices: implicit, explicit, smart
+#   https://docs.ansible.com/ansible/latest/reference_appendices/config.html#default-gathering
+ANSIBLE_GATHERING="${ANSIBLE_GATHERING:-implicit}"
 # REQUIRED_VARS
 #   Env variables required by this test
 REQUIRED_VARS=("ANSIBLE_VER" "REPO_NAME")
@@ -78,6 +83,7 @@ rlJournalStart
         for test_playbook in $test_playbooks; do
             lsrHandleVault "$role_path/tests/$test_playbook"
         done
+        lsrSetAnsibleGathering "$ANSIBLE_GATHERING"
         lsrGetCollectionPath
         # collection_path and guests_yml is defined in lsrGetCollectionPath
         # shellcheck disable=SC2154

@@ -588,6 +588,16 @@ lsrSetupGetPythonModules() {
     done
 }
 
+lsrSetAnsibleGathering() {
+    local value=$1
+    if [[ ! $value =~ ^(implicit|explicit|smart)$ ]]; then
+        rlLogError "Value for ANSIBLE_GATHERING must be one of implicit, explicit, smart"
+        rlLogError "Provided value: $value"
+        return 1
+    fi
+    ANSIBLE_ENVS[ANSIBLE_GATHERING]="$value"
+}
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #   Verification
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

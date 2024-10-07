@@ -380,7 +380,7 @@ lsrArrtoStr() {
     eval "values=(\${$arr_name[@]})"
     for i in $(seq 0 $((${#keys[@]} - 1))); do
         key="${keys[$i-1]}"
-        value="${values[$i-1]}"
+        value="${values[$i]}"
         printf "%s=%s " "$key" "$value"
     done
     echo

@@ -313,7 +313,7 @@ lsrUploadLogs() {
     if [ -z "$LINUXSYSTEMROLES_SSH_KEY" ]; then
         return
     fi
-    id_rsa_path="$role_path/id_rsa"
+    id_rsa_path=$(mktemp -t id_rsa-XXXXX)
     echo "$LINUXSYSTEMROLES_SSH_KEY" | \
         sed -e 's|-----BEGIN OPENSSH PRIVATE KEY----- |-----BEGIN OPENSSH PRIVATE KEY-----\n|' \
         -e 's| -----END OPENSSH PRIVATE KEY-----|\n-----END OPENSSH PRIVATE KEY-----|' > "$id_rsa_path" # notsecret

@@ -376,8 +376,8 @@ lsrArrtoStr() {
     local keys values key value
     local arr_name=$1
     # Convert associative array into a space separated key=value list
-    eval "keys=(\${!$arr_name[@]})"
-    eval "values=(\${$arr_name[@]})"
+    eval "keys=(\${!${arr_name}[@]})"
+    eval "values=(\${${arr_name}[@]})"
     for i in $(seq 0 $((${#keys[@]} - 1))); do
         key="${keys[$i]}"
         value="${values[$i]}"
@@ -554,8 +554,8 @@ lsrMssqlHaUpdateInventory() {
     local keys values key value
     local inventory=$1
     local arr_name=$2
-    eval "keys=(\${!$arr_name[@]})"
-    eval "values=(\${$arr_name[@]})"
+    eval "keys=(\${!${arr_name}[@]})"
+    eval "values=(\${${arr_name}[@]})"
     rlRun "cat $inventory"
     for i in $(seq 0 $((${#keys[@]} - 1))); do
         key="${keys[$i]}"

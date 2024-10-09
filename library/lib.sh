@@ -280,13 +280,13 @@ lsrGetNodeIp() {
     local guests_yml=$1
     local node=$2
     # awk '$1=$1' to remove extra spaces
-    sed --quiet "/$node:/,/^[^ ]/p" "$guests_yml"  | sed --quiet --regexp-extended 's/primary-address: (.*)/\1/p' | awk '$1=$1'
+    sed --quiet "/^$node:$/,/^[^ ]/p" "$guests_yml"  | sed --quiet --regexp-extended 's/primary-address: (.*)/\1/p' | awk '$1=$1'
 }
 
 lsrGetNodeOs() {
     local guests_yml=$1
     local node=$2
-    sed --quiet "/$node:/,/^[^ ]/p" "$guests_yml" | sed --quiet --regexp-extended 's/distro: (.*)/\1/p' | awk '$1=$1'
+    sed --quiet "/^$node:$/,/^[^ ]/p" "$guests_yml" | sed --quiet --regexp-extended 's/distro: (.*)/\1/p' | awk '$1=$1'
 }
 
 lsrGetNodeKeyPrivate() {

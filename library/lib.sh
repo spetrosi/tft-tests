@@ -255,45 +255,45 @@ lsrConvertToCollection() {
 
 lsrGetManagedNodes() {
     local guests_yml=$1
-    sed --quiet --regexp-extended 's/(^managed.*):/\1/p' "$guests_yml" | sort
+    sed --quiet --regexp-extended 's/(^managed.*):$/\1/p' "$guests_yml" | sort
 }
 
 lsrGetNodes() {
     local guests_yml=$1
-    sed --quiet --regexp-extended 's/(^[^ ]*):/\1/p' "$guests_yml" | sort
+    sed --quiet --regexp-extended 's/(^[^ ]*):$/\1/p' "$guests_yml" | sort
 }
 
 lsrGetNodeName() {
     local guests_yml=$1
     local node_pat=$2
-    sed --quiet --regexp-extended "s/(^$node_pat.*):/\1/p" "$guests_yml"
+    sed --quiet --regexp-extended "s/(^$node_pat.*):$/\1/p" "$guests_yml"
 }
 
 lsrGetCurrNodeHostname() {
     local guests_yml=$1
     local ip_addr
     ip_addr=$(hostname -I | awk '{print $1}')
-    grep "primary-address: $ip_addr" "$guests_yml" -B 10 | sed --quiet --regexp-extended 's/(^[^ ]*):/\1/p'
+    grep "primary-address: $ip_addr" "$guests_yml" -B 10 | sed --quiet --regexp-extended 's/(^[^ ]*):$/\1/p'
 }
 
 lsrGetNodeIp() {
     local guests_yml=$1
     local node=$2
     # awk '$1=$1' to remove extra spaces
-    sed --quiet "/$node\:/,/^[^ ]/p" "$guests_yml"  | sed --quiet --regexp-extended 's/primary-address: (.*)/\1/p' | awk '$1=$1'
+    sed --quiet "/$node:/,/^[^ ]/p" "$guests_yml"  | sed --quiet --regexp-extended 's/primary-address: (.*)/\1/p' | awk '$1=$1'
 }
 
 lsrGetNodeOs() {
     local guests_yml=$1
     local node=$2
-    sed --quiet "/$node\:/,/^[^ ]/p" "$guests_yml" | sed --quiet --regexp-extended 's/distro\: (.*)/\1/p' | awk '$1=$1'
+    sed --quiet "/$node:/,/^[^ ]/p" "$guests_yml" | sed --quiet --regexp-extended 's/distro: (.*)/\1/p' | awk '$1=$1'
 }
 
 lsrGetNodeKeyPrivate() {
     local guests_yml=$1
     local node=$2
     # Key is a list containing SSH keys, the first key is private
-    sed --quiet "/^$node\:/,/^[^ ]/p" "$guests_yml"  | grep 'key\:' -A1 | tail -n1 | grep -o '/.*'
+    sed --quiet "/^$node:$/,/^[^ ]/p" "$guests_yml"  | grep 'key:' -A1 | tail -n1 | grep -o '/.*'
 }
 
 lsrGetNodeKeyPublic() {
@@ -379,7 +379,7 @@ lsrArrtoStr() {
     eval "keys=(\${!$arr_name[@]})"
     eval "values=(\${$arr_name[@]})"
     for i in $(seq 0 $((${#keys[@]} - 1))); do
-        key="${keys[$i-1]}"
+        key="${keys[$i]}"
         value="${values[$i]}"
         printf "%s=%s " "$key" "$value"
     done
@@ -519,15 +519,6 @@ lsrDiskProvisionerRequired() {
     return 1
 }
 
-lsrCheckPartitionSize() {
-    local file_or_dir="$1"
-    local op="$2"
-    local size="$3"  # in kb - like df -k
-    local available
-    available=$(df -k "$file_or_dir" --output=avail | tail -1)
-    test "$available" "$op" "$size"
-}
-
 lsrGenerateTestDisks() {
     local tests_path=$1
     local provisionfmf="$tests_path"/provision.fmf
@@ -536,21 +527,22 @@ lsrGenerateTestDisks() {
     if ! lsrDiskProvisionerRequired "$tests_path"; then
         return 0
     fi
-
-    # disk_provisioner needs at least 10GB - if /tmp does not have enough space, use /var/tmp
-    if lsrCheckPartitionSize "/tmp" -gt 10485760; then
-        disk_provisioner_dir=/tmp/disk_provisioner
-    else
-        disk_provisioner_dir=/var/tmp/disk_provisioner
-    fi
     managed_nodes=$(lsrGetManagedNodes "$guests_yml")
     control_node_name=$(lsrGetNodeName "$guests_yml" "control-node")
     control_node_key=$(lsrGetNodeKeyPrivate "$guests_yml" "$control_node_name")
 
     for managed_node in $managed_nodes; do
         node_ip=$(lsrGetNodeIp "$guests_yml" "$managed_node")
-        rlRun "scp -o StrictHostKeyChecking=no -i $control_node_key $disk_provisioner_script $provisionfmf root@$node_ip:/tmp/"
         ssh_cmd="ssh -o StrictHostKeyChecking=no -i $control_node_key root@$node_ip"
+        rlRun "available=$($ssh_cmd 'df -k /tmp --output=avail | tail -1')"
+        # available is defined above
+        # shellcheck disable=SC2154
+        if [ "$available" -gt 10485760 ]; then
+            disk_provisioner_dir=/tmp/disk_provisioner
+        else
+            disk_provisioner_dir=/var/tmp/disk_provisioner
+        fi
+        rlRun "scp -o StrictHostKeyChecking=no -i $control_node_key $disk_provisioner_script $provisionfmf root@$node_ip:/tmp/"
         rlRun "$ssh_cmd \"WORK_DIR=$disk_provisioner_dir FMF_DIR=/tmp/ /tmp/$disk_provisioner_script start\""
         # Ensure that a new devices really exists
         rlRun "$ssh_cmd \"fdisk -l | grep 'Disk /dev/'\""

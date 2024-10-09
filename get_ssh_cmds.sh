@@ -12,7 +12,7 @@ fi
 last_run_abs=$tmt_tmp/$run
 plan_abs=$(find "$last_run_abs"/plans/* -maxdepth 0 -type d)
 guests_yml=$plan_abs/provision/guests.yaml
-nodes=$(sed --quiet --regexp-extended 's/(^[^ ]*):/\1/p' "$guests_yml" | sort)
+nodes=$(sed --quiet --regexp-extended 's/(^[^ ]*):$/\1/p' "$guests_yml" | sort)
 for node in $nodes; do
     id_ecdsa=$plan_abs/provision/$node/id_ecdsa
     ip_addr=$(sed --quiet "/$node\:/,/^[^ ]/p" "$guests_yml"  | sed --quiet --regexp-extended 's/primary-address: (.*)/\1/p' | awk '$1=$1')

@@ -416,6 +416,8 @@ lsrRunPlaybooksParallel() {
         fi
         sleep 1
     done
+    # After all playbooks finish, sleep 5s to wait for uploading logs in lsrUploadLogs
+    sleep 5
 }
 
 lsrCS8InstallPython() {

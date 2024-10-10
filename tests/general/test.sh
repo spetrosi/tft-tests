@@ -47,6 +47,11 @@ if [ "$(echo "$SYSTEM_ROLES_ONLY_TESTS" | wc -w)" -eq 1 ]; then
 else
     LSR_TFT_DEBUG="${LSR_TFT_DEBUG:-false}"
 fi
+# ANSIBLE_GATHERING
+#   Use this to set value for the ANSIBLE_GATHERING environmental variable for ansible-playbook.
+#   Choices: implicit, explicit, smart
+#   https://docs.ansible.com/ansible/latest/reference_appendices/config.html#default-gathering
+ANSIBLE_GATHERING="${ANSIBLE_GATHERING:-implicit}"
 # REQUIRED_VARS
 #   Env variables required by this test
 REQUIRED_VARS=("ANSIBLE_VER" "REPO_NAME")
@@ -62,31 +67,32 @@ rlJournalStart
             fi
         done
         lsrInstallAnsible
-        lsrInstallYq
         if [ "${ANSIBLE_VER:-}" = 2.9 ]; then
             # does not work with 2.9
             GET_PYTHON_MODULES=false
         fi
-        lsrGetRoleDir
+        lsrGetRoleDir "$REPO_NAME"
         # role_path is defined in lsrGetRoleDir
         # shellcheck disable=SC2154
-        test_playbooks=$(lsrGetTests "$role_path")
+        lsrGenerateTestDisks "$role_path"/tests
+        test_playbooks=$(lsrGetTests "$role_path"/tests)
         rlLogInfo "Test playbooks: $test_playbooks"
         if [ -z "$test_playbooks" ]; then
             rlDie "No test playbooks found"
         fi
         for test_playbook in $test_playbooks; do
-            lsrHandleVault "$role_path" "$test_playbook"
+            lsrHandleVault "$role_path/tests/$test_playbook"
         done
+        lsrSetAnsibleGathering "$ANSIBLE_GATHERING"
         lsrGetCollectionPath
         # collection_path and guests_yml is defined in lsrGetCollectionPath
         # shellcheck disable=SC2154
         lsrInstallDependencies "$role_path" "$collection_path"
         lsrEnableCallbackPlugins "$collection_path"
-        lsrConvertToCollection "$role_path" "$collection_path"
+        lsrConvertToCollection "$role_path" "$collection_path" "$REPO_NAME"
         # tmt_tree_provision and guests_yml is defined in lsrPrepTestVars
         # shellcheck disable=SC2154
-        inventory=$(lsrPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
+        inventory=$(lsrPrepareInventoryVars "$tmt_tree_provision" "$guests_yml")
         rlRun "cat $inventory"
         tests_path="$collection_path"/ansible_collections/fedora/linux_system_roles/tests/"$REPO_NAME"/
         if [ "${GET_PYTHON_MODULES:-}" = true ]; then

@@ -48,14 +48,10 @@ lsrInstallAnsible() {
     fi
 }
 
-lsrInstallYq() {
-    rlRun "yum install python3-pip -y"
-    rlRun "python3 -m pip install yq"
-}
-
 lsrCloneRepo() {
     local role_path=$1
-    rlRun "git clone -q https://github.com/$GITHUB_ORG/$REPO_NAME.git $role_path --depth 1"
+    local repo_name=$2
+    rlRun "git clone -q https://github.com/$GITHUB_ORG/$repo_name.git $role_path --depth 1"
     if [ -n "$PR_NUM" ]; then
         # git on EL7 doesn't support -C option
         pushd "$role_path" || exit
@@ -69,19 +65,19 @@ lsrCloneRepo() {
 }
 
 lsrGetRoleDir() {
+    local repo_name=$1
     if [ "$TEST_LOCAL_CHANGES" == true ] || [ "$TEST_LOCAL_CHANGES" == True ]; then
         rlLog "Test from local changes"
         role_path="$TMT_TREE"
     else
-        role_path=$(mktemp --directory -t "$REPO_NAME"-XXX)
-        lsrCloneRepo "$role_path"
+        role_path=$(mktemp --directory -t "$repo_name"-XXX)
+        lsrCloneRepo "$role_path" "$repo_name"
     fi
 }
 
 lsrGetTests() {
-    local role_path=$1
+    local tests_path=$1
     local test_playbooks_all test_playbooks
-    tests_path="$role_path"/tests/
     test_playbooks_all=$(find "$tests_path" -maxdepth 1 -type f -name "tests_*.yml" -printf '%f\n')
     if [ -n "$SYSTEM_ROLES_ONLY_TESTS" ]; then
         for test_playbook in $test_playbooks_all; do
@@ -110,11 +106,12 @@ lsrGetTests() {
 
 # Handle Ansible Vault encrypted variables
 lsrHandleVault() {
-    local role_path=$1
-    local playbook_file=$role_path/tests/$2
-    local vault_pwd_file=$role_path/tests/vault_pwd
-    local vault_variables_file=$role_path/tests/vars/vault-variables.yml
-    local no_vault_file=$role_path/tests/no-vault-variables.txt
+    local playbook_file=$1
+    local tests_path
+    tests_path=$(dirname "$playbook_file")
+    local vault_pwd_file=$tests_path/vault_pwd
+    local vault_variables_file=$tests_path/vars/vault-variables.yml
+    local no_vault_file=$tests_path/no-vault-variables.txt
     local vault_play
 
     if [ ! -f "$vault_pwd_file" ] || [ ! -f "$vault_variables_file" ]; then
@@ -214,10 +211,11 @@ lsrEnableCallbackPlugins() {
 lsrConvertToCollection() {
     local role_path=$1
     local collection_path=$2
+    local role_name=$3
     local collection_script_url=https://raw.githubusercontent.com/linux-system-roles/auto-maintenance/main
     local coll_namespace=fedora
     local coll_name=linux_system_roles
-    local subrole_prefix=private_"$REPO_NAME"_subrole_
+    local subrole_prefix=private_"$role_name"_subrole_
     local tmpdir=/tmp/lsr_role2collection
     local lsr_role2collection=$tmpdir/lsr_role2collection.py
     local runtime=$tmpdir/runtime.yml
@@ -231,23 +229,23 @@ lsrConvertToCollection() {
         rlRun "curl -L -o $runtime $collection_script_url/lsr_role2collection/runtime.yml"
     fi
     # Remove role that was installed as a dependency
-    rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$REPO_NAME"
+    rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/roles/$role_name"
     # Remove performancecopilot vendored by metrics. It will be generated during a conversion to collection.
-    if [ "$REPO_NAME" = "metrics" ]; then
+    if [ "$role_name" = "metrics" ]; then
         rlRun "rm -rf $collection_path/ansible_collections/fedora/linux_system_roles/vendor/github.com/performancecopilot/ansible-pcp"
     fi
     rlRun "python$PYTHON_VERSION -m pip install ruamel-yaml"
     # Remove symlinks in tests/roles
     if [ -d "$role_path"/tests/roles ]; then
         find "$role_path"/tests/roles -type l -exec rm {} \;
-        if [ -d "$role_path"/tests/roles/linux-system-roles."$REPO_NAME" ]; then
-            rlRun "rm -r $role_path/tests/roles/linux-system-roles.$REPO_NAME"
+        if [ -d "$role_path"/tests/roles/linux-system-roles."$role_name" ]; then
+            rlRun "rm -r $role_path/tests/roles/linux-system-roles.$role_name"
         fi
     fi
     rlRun "python$PYTHON_VERSION $lsr_role2collection \
 --meta-runtime $runtime \
 --src-owner linux-system-roles \
---role $REPO_NAME \
+--role $role_name \
 --src-path $role_path \
 --dest-path $collection_path \
 --namespace $coll_namespace \
@@ -257,35 +255,69 @@ lsrConvertToCollection() {
 
 lsrGetManagedNodes() {
     local guests_yml=$1
-    yq -r ". | keys[] | select(test(\"managed*\"))" "$guests_yml" | sort
+    sed --quiet --regexp-extended 's/(^managed.*):$/\1/p' "$guests_yml" | sort
 }
 
 lsrGetNodes() {
     local guests_yml=$1
-    yq -r ". | keys[]" "$guests_yml" | sort
+    sed --quiet --regexp-extended 's/(^[^ ]*):$/\1/p' "$guests_yml" | sort
 }
 
-lsrGetControlNodeName() {
+lsrGetNodeName() {
     local guests_yml=$1
-    yq -r ". | keys[] | select(test(\"control*\"))" "$guests_yml"
+    local node_pat=$2
+    sed --quiet --regexp-extended "s/(^$node_pat.*):$/\1/p" "$guests_yml"
+}
+
+lsrGetCurrNodeHostname() {
+    local guests_yml=$1
+    local ip_addr
+    ip_addr=$(hostname -I | awk '{print $1}')
+    grep "primary-address: $ip_addr" "$guests_yml" -B 10 | sed --quiet --regexp-extended 's/(^[^ ]*):$/\1/p'
+}
+
+lsrGetNodeIp() {
+    local guests_yml=$1
+    local node=$2
+    # awk '$1=$1' to remove extra spaces
+    sed --quiet "/^$node:$/,/^[^ ]/p" "$guests_yml"  | sed --quiet --regexp-extended 's/primary-address: (.*)/\1/p' | awk '$1=$1'
+}
+
+lsrGetNodeOs() {
+    local guests_yml=$1
+    local node=$2
+    sed --quiet "/^$node:$/,/^[^ ]/p" "$guests_yml" | sed --quiet --regexp-extended 's/distro: (.*)/\1/p' | awk '$1=$1'
+}
+
+lsrGetNodeKeyPrivate() {
+    local guests_yml=$1
+    local node=$2
+    # Key is a list containing SSH keys, the first key is private
+    sed --quiet "/^$node:$/,/^[^ ]/p" "$guests_yml"  | grep 'key:' -A1 | tail -n1 | grep -o '/.*'
+}
+
+lsrGetNodeKeyPublic() {
+    local guests_yml=$1
+    local node=$2
+    # Append .pub to the private key
+    lsrGetNodeKeyPrivate "$guests_yml" "$node" | awk '{print $1".pub"}'
 }
 
 lsrPrepareInventoryVars() {
-    local role_path=$1
-    local tmt_tree_provision=$2
-    local guests_yml=$3
+    local tmt_tree_provision=$1
+    local guests_yml=$2
     local inventory is_virtual  managed_nodes
-    inventory=$(mktemp -p "$role_path" -t inventory-XXX.yml)
+    inventory=$(mktemp -t inventory-XXX.yml)
     # TMT_TOPOLOGY_ variables are not available in tmt try.
     # Reading topology from guests.yml for compatibility with tmt try
     is_virtual=$(lsrIsVirtual "$tmt_tree_provision")
     managed_nodes=$(lsrGetManagedNodes "$guests_yml")
-    control_node_name=$(lsrGetControlNodeName "$guests_yml")
+    control_node_name=$(lsrGetNodeName "$guests_yml" "control-node")
     echo "---
 all:
   hosts:" > "$inventory"
     for managed_node in $managed_nodes; do
-        ip_addr=$(yq ".\"$managed_node\".\"primary-address\"" "$guests_yml")
+        ip_addr=$(lsrGetNodeIp "$guests_yml" "$managed_node")
         {
         echo "    $managed_node:"
         echo "      ansible_host: $ip_addr"
@@ -308,6 +340,7 @@ lsrIsVirtual() {
 lsrUploadLogs() {
     local logfile=$1
     local guests_yml=$2
+    local role_name=$3
     local id_rsa_path pr_substr os artifact_dirname target_dir
     rlFileSubmit "$logfile"
     if [ -z "$LINUXSYSTEMROLES_SSH_KEY" ]; then
@@ -319,15 +352,15 @@ lsrUploadLogs() {
         -e 's| -----END OPENSSH PRIVATE KEY-----|\n-----END OPENSSH PRIVATE KEY-----|' > "$id_rsa_path" # notsecret
     chmod 600 "$id_rsa_path"
     if [ -z "$ARTIFACTS_DIR" ]; then
-        control_node_name=$(lsrGetControlNodeName "$guests_yml")
-        os=$(yq -r ".\"$control_node_name\".facts.distro" "$guests_yml" | sed 's/ /_/g')
+        control_node_name=$(lsrGetNodeName "$guests_yml" "control-node")
+        os=$(lsrGetNodeOs "$guests_yml" "$control_node_name")
         printf -v date '%(%Y%m%d-%H%M%S)T' -1
         if [ -z "$PR_NUM" ]; then
             pr_substr=_main
         else
             pr_substr=_$PR_NUM
         fi
-        artifact_dirname=tmt-"$REPO_NAME""$pr_substr"_"$os"_"$date"/artifacts
+        artifact_dirname=tmt-"$role_name""$pr_substr"_"$os"_"$date"/artifacts
         target_dir="/srv/pub/alt/linuxsystemroles/logs"
         ARTIFACTS_DIR="$target_dir"/"$artifact_dirname"
         ARTIFACTS_URL=https://dl.fedoraproject.org/pub/alt/linuxsystemroles/logs/$artifact_dirname/
@@ -340,13 +373,15 @@ lsrUploadLogs() {
 }
 
 lsrArrtoStr() {
+    local keys values key value
+    local arr_name=$1
     # Convert associative array into a space separated key=value list
-    eval "arr=(\${!$1[@]})"
-    # arr and val are defined above with eval
-    # shellcheck disable=SC2154
-    for k in "${arr[@]}"; do
-        eval "val=\${$1[$k]}"
-        printf "%s=%s " "$k" "$val"
+    eval "keys=(\${!${arr_name}[@]})"
+    eval "values=(\${${arr_name}[@]})"
+    for i in $(seq 0 $((${#keys[@]} - 1))); do
+        key="${keys[$i]}"
+        value="${values[$i]}"
+        printf "%s=%s " "$key" "$value"
     done
     echo
 }
@@ -358,6 +393,7 @@ lsrRunPlaybook() {
     local skip_tags=$4
     local limit=$5
     local LOGFILE=$6
+    local role_name=$7
     local result=FAIL
     local cmd log_msg
     local ans_debug=""
@@ -375,13 +411,13 @@ lsrRunPlaybook() {
     logfile_name=$LOGFILE-$result.log
     mv "$LOGFILE" "$logfile_name"
     LOGFILE=$logfile_name
-    lsrUploadLogs "$LOGFILE" "$guests_yml"
+    lsrUploadLogs "$LOGFILE" "$guests_yml" "$role_name"
     if [ "${GET_PYTHON_MODULES:-}" = true ]; then
         cmd="$(lsrArrtoStr ANSIBLE_ENVS) ansible-playbook -i $inventory $skip_tags $limit process_python_modules_packages.yml -vv"
         local packages="$LOGFILE.packages"
         rlRun "$cmd -e packages_file=$packages -e logfile=$LOGFILE &> $LOGFILE.modules" 0 "process python modules"
-        lsrUploadLogs "$LOGFILE.modules" "$guests_yml"
-        lsrUploadLogs "$packages" "$guests_yml"
+        lsrUploadLogs "$LOGFILE.modules" "$guests_yml" "$role_name"
+        lsrUploadLogs "$packages" "$guests_yml" "$role_name"
     fi
 }
 
@@ -393,6 +429,7 @@ lsrRunPlaybooksParallel() {
     local skip_tags=$3
     local test_playbooks=$4
     local managed_nodes=$5
+    local role_name=$6
     local test_playbooks_arr
 
     read -ra test_playbooks_arr <<< "$test_playbooks"
@@ -402,7 +439,7 @@ lsrRunPlaybooksParallel() {
                 test_playbook=${test_playbooks_arr[0]}
                 test_playbooks_arr=("${test_playbooks_arr[@]:1}") # Remove first element from array
                 LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"-$tmt_plan
-                lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$skip_tags" "--limit $managed_node" "$LOGFILE" &
+                lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$skip_tags" "--limit $managed_node" "$LOGFILE" "$role_name" &
                 sleep 1
                 break
             fi
@@ -420,28 +457,20 @@ lsrRunPlaybooksParallel() {
     sleep 5
 }
 
-lsrCS8InstallPython() {
-    # Install python on managed node when running CS8 with ansible!=2.9
-    if [ "$ANSIBLE_VER" != "2.9" ] && grep -q 'CentOS Stream release 8' /etc/redhat-release; then
-        rlRun "dnf install -y python$PYTHON_VERSION"
-    fi
-}
-
 lsrDistributeSSHKeys() {
-    # name: Distribute SSH keys when provisioned with how=virtual
     local tmt_tree_provision=$1
-    local control_node_id_ecdsa_pub control_node_name
-    control_node_name=$(lsrGetControlNodeName "$guests_yml")
-    control_node_id_ecdsa_pub=$tmt_tree_provision/$control_node_name/id_ecdsa.pub
-    if [ -f "$control_node_id_ecdsa_pub" ]; then
-        rlRun "cat $control_node_id_ecdsa_pub >> ~/.ssh/authorized_keys"
+    local control_node_key_pub control_node_name
+    control_node_name=$(lsrGetNodeName "$guests_yml" "control-node")
+    control_node_key_pub=$(lsrGetNodeKeyPublic "$guests_yml" "$control_node_name")
+    control_node_key_pub_content=$(cat "$control_node_key_pub")
+    if [ -f "$control_node_key_pub" ] && ! grep "$control_node_key_pub_content" ~/.ssh/authorized_keys; then
+        rlRun "cat $control_node_key_pub >> ~/.ssh/authorized_keys"
     fi
 }
 
 lsrSetHostname() {
     local guests_yml=$1
-    ip_addr=$(hostname -I | awk '{print $1}')
-    hostname=$(yq -r "to_entries | .[] | select(.value.\"primary-address\" == \"$ip_addr\") | .key" "$guests_yml")
+    hostname=$(lsrGetCurrNodeHostname "$guests_yml")
     rlRun "hostnamectl set-hostname $hostname"
 }
 
@@ -449,8 +478,10 @@ lsrBuildEtcHosts() {
     local guests_yml=$1
     managed_nodes=$(lsrGetManagedNodes "$guests_yml")
     for managed_node in $managed_nodes; do
-        managed_node_ip=$(yq -r ".\"$managed_node\".\"primary-address\"" "$guests_yml")
-        echo "$managed_node_ip" "$managed_node" >> /etc/hosts
+        managed_node_ip=$(lsrGetNodeIp "$guests_yml" "$managed_node")
+        if ! grep -q "$managed_node_ip $managed_node" /etc/hosts; then
+            rlRun "echo $managed_node_ip $managed_node >> /etc/hosts"
+        fi
     done
     rlRun "cat /etc/hosts"
 }
@@ -479,62 +510,61 @@ lsrDisableNFV() {
     fi
 }
 
+lsrDiskProvisionerRequired() {
+# check if the test requires additional disk devices
+# to be provisioned
+    local tests_path=$1
+    local provision_fmf="$tests_path/provision.fmf"
+    if grep -q "drive:" "$provision_fmf" 2> /dev/null; then
+        return 0
+    fi
+    return 1
+}
+
 lsrGenerateTestDisks() {
-# This function generates test disks from provision.fmf
-# This is required by storage and snapshot roles
-    local provisionfmf
-    local -i i=0
-    local disk_provisioner_dir TARGETCLI_CMD disks disk file
-    lsrGetRoleDir
-    provisionfmf="$role_path"/tests/provision.fmf
-    if [ ! -f "$provisionfmf" ]; then
-        rlRun "rm -rf ${role_path}"
-        return
+    local tests_path=$1
+    local provisionfmf="$tests_path"/provision.fmf
+    local disk_provisioner_script=disk_provisioner.sh
+    local disk_provisioner_dir
+    if ! lsrDiskProvisionerRequired "$tests_path"; then
+        return 0
     fi
-    if ! grep -q drive: "$provisionfmf"; then
-        rlRun "rm -rf ${role_path}"
-        return
-    fi
-    rlRun "yum install targetcli -y"
-    disks=$(sed -rn 's/^\s*-?\s+size:\s+(.*)/\1/p' "$provisionfmf")
-    # Nothing to do
-    [ -z "$disks" ] && return
+    managed_nodes=$(lsrGetManagedNodes "$guests_yml")
+    control_node_name=$(lsrGetNodeName "$guests_yml" "control-node")
+    control_node_key=$(lsrGetNodeKeyPrivate "$guests_yml" "$control_node_name")
 
-    # disk_provisioner needs at least 10GB - if /tmp does not have enough space, use /var/tmp
-    if lsrCheckPartitionSize "/tmp" -gt 10485760; then
-        disk_provisioner_dir=$(mktemp --directory --tmpdir=/tmp)
-    else
-        disk_provisioner_dir=$(mktemp --directory --tmpdir=/var/tmp)
-    fi
-
-    TARGETCLI_CMD="set global auto_cd_after_create=true
-/loopback create
-set global auto_cd_after_create=false"
-
-    for disk in $disks; do
-        file="${disk_provisioner_dir}/disk${i}"
-        rlRun "truncate -s $disk $file"
-		TARGETCLI_CMD="${TARGETCLI_CMD}
-/backstores/fileio create disk${i} ${file}
-luns/ create /backstores/fileio/disk${i}"
-        ((++i))
+    for managed_node in $managed_nodes; do
+        node_ip=$(lsrGetNodeIp "$guests_yml" "$managed_node")
+        ssh_cmd="ssh -o StrictHostKeyChecking=no -i $control_node_key root@$node_ip"
+        rlRun "available=$($ssh_cmd 'df -k /tmp --output=avail | tail -1')"
+        # available is defined above
+        # shellcheck disable=SC2154
+        if [ "$available" -gt 10485760 ]; then
+            disk_provisioner_dir=/tmp/disk_provisioner
+        else
+            disk_provisioner_dir=/var/tmp/disk_provisioner
+        fi
+        rlRun "scp -o StrictHostKeyChecking=no -i $control_node_key $disk_provisioner_script $provisionfmf root@$node_ip:/tmp/"
+        rlRun "$ssh_cmd \"WORK_DIR=$disk_provisioner_dir FMF_DIR=/tmp/ /tmp/$disk_provisioner_script start\""
+        # Ensure that a new devices really exists
+        rlRun "$ssh_cmd \"fdisk -l | grep 'Disk /dev/'\""
+        rlRun "$ssh_cmd \"lsblk -l | cut -d\  -f1 | grep -v NAME | sed 's/^/\/dev\//' | xargs ls -l\""
     done
-    targetcli <<< "$TARGETCLI_CMD"
-
-    rlRun "rm -rf ${disk_provisioner_dir}"
-    rlRun "rm -rf ${role_path}"
 }
 
 lsrMssqlHaUpdateInventory() {
+    local keys values key value
     local inventory=$1
-    eval "arr=(\${!$2[@]})"
+    local arr_name=$2
+    eval "keys=(\${!${arr_name}[@]})"
+    eval "values=(\${${arr_name}[@]})"
     rlRun "cat $inventory"
-    # cat "$inventory"
-    # arr and val are defined above with eval
-    # shellcheck disable=SC2154
-    for k in "${arr[@]}"; do
-        eval "val=\${$2[$k]}"
-        yq -yi ".all.hosts.\"$k\" += {\"mssql_ha_replica_type\": \"$val\"}" "$inventory"
+    for i in $(seq 0 $((${#keys[@]} - 1))); do
+        key="${keys[$i]}"
+        if grep "$key" "$inventory"; then
+            value="${values[$i]}"
+            rlRun "sed -i \"/$key:/a\ \ \ \ \ \ mssql_ha_replica_type: $value\" $inventory"
+        fi
     done
     rlRun "cat $inventory"
 }
@@ -550,6 +580,16 @@ lsrSetupGetPythonModules() {
   environment:\
     PYTHONVERBOSE: "1"' -i "$tests_dir$test_pb"
     done
+}
+
+lsrSetAnsibleGathering() {
+    local value=$1
+    if [[ ! $value =~ ^(implicit|explicit|smart)$ ]]; then
+        rlLogError "Value for ANSIBLE_GATHERING must be one of implicit, explicit, smart"
+        rlLogError "Provided value: $value"
+        return 1
+    fi
+    ANSIBLE_ENVS[ANSIBLE_GATHERING]="$value"
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

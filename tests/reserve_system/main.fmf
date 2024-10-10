@@ -5,5 +5,3 @@ duration: 8h
 tag: reserve_system
 require:
     - beakerlib
-    # Required for yq
-    - jq

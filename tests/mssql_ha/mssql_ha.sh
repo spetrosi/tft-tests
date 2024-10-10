@@ -44,15 +44,17 @@ PYTHON_VERSION="${PYTHON_VERSION:-3.12}"
 SKIP_TAGS="--skip-tags tests::nvme,tests::infiniband"
 # LSR_TFT_DEBUG
 #   Print output of ansible playbooks to terminal in addition to printing it to logfile
-# MSSQL_VERSION
-#   SQL Server version to use in the test
-MSSQL_VERSION="${MSSQL_VERSION:-2022}"
-
 if [ "$(echo "$SYSTEM_ROLES_ONLY_TESTS" | wc -w)" -eq 1 ]; then
     LSR_TFT_DEBUG=true
 else
     LSR_TFT_DEBUG="${LSR_TFT_DEBUG:-false}"
 fi
+# ANSIBLE_GATHERING
+#   Use this to set value for the ANSIBLE_GATHERING environmental variable for ansible-playbook.
+#   Choices: implicit, explicit, smart
+#   https://docs.ansible.com/ansible/latest/reference_appendices/config.html#default-gathering
+ANSIBLE_GATHERING="${ANSIBLE_GATHERING:-implicit}"
+
 # REQUIRED_VARS
 #   Env variables required by this test
 REQUIRED_VARS=("ANSIBLE_VER")
@@ -67,28 +69,28 @@ rlJournalStart
             fi
         done
         lsrInstallAnsible
-        lsrInstallYq
-        lsrGetRoleDir
+        lsrGetRoleDir "$REPO_NAME"
         # role_path is defined in lsrGetRoleDir
         # shellcheck disable=SC2154
-        test_playbooks=$(lsrGetTests "$role_path")
+        test_playbooks=$(lsrGetTests "$role_path"/tests)
         rlLogInfo "Test playbooks: $test_playbooks"
         if [ -z "$test_playbooks" ]; then
             rlDie "No test playbooks found"
         fi
         for test_playbook in $test_playbooks; do
-            lsrHandleVault "$role_path" "$test_playbook"
+            lsrHandleVault "$role_path/tests/$test_playbook"
         done
+        lsrSetAnsibleGathering "$ANSIBLE_GATHERING"
         lsrGetCollectionPath
         # role_path is defined in lsrGetRoleDir
         # shellcheck disable=SC2154
         lsrInstallDependencies "$role_path" "$collection_path"
         lsrEnableCallbackPlugins "$collection_path"
-        lsrConvertToCollection "$role_path" "$collection_path"
+        lsrConvertToCollection "$role_path" "$collection_path" "$REPO_NAME"
         # tmt_tree_provision and guests_yml is defined in lsrPrepTestVars
         # shellcheck disable=SC2154
-        inventory_external=$(lsrPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
-        inventory_read_scale=$(lsrPrepareInventoryVars "$role_path" "$tmt_tree_provision" "$guests_yml")
+        inventory_external=$(lsrPrepareInventoryVars "$tmt_tree_provision" "$guests_yml")
+        inventory_read_scale=$(lsrPrepareInventoryVars "$tmt_tree_provision" "$guests_yml")
 
         declare -A external_node_types
         external_node_types[managed-node1]=primary
@@ -107,8 +109,8 @@ rlJournalStart
         lsrMssqlHaUpdateInventory "$inventory_read_scale" read_scale_node_types
 
         # Find the IP of the virtualip node that was shut down
-        virtualip_name=$(yq -r ". | keys[] | select(test(\"virtualip\"))" "$guests_yml")
-        virtualip=$(yq -r ".[\"$virtualip_name\"].\"primary-address\"" "$guests_yml")
+        virtualip_name=$(sed --quiet --regexp-extended 's/^(virtualip.*):/\1/p' "$guests_yml")
+        virtualip=$(lsrGetNodeIp "$guests_yml" "$virtualip_name")
         # Shut down virtualip if it's pingable
         if ping -c1 "$virtualip"; then
             rlRun "ssh -i $tmt_tree_provision/$virtualip_name/id_ecdsa root@$virtualip -oStrictHostKeyChecking=no shutdown"
@@ -121,12 +123,12 @@ rlJournalStart
         rlRun "grep '^ *mssql_ha_virtual_ip' $tests_path/tests_configure_ha_cluster_external.yml"
     rlPhaseEnd
     rlPhaseStartTest
-        os_ver=$(yq -r '."managed-node1".facts."os-release-content".VERSION' "$guests_yml" | sed 's/ /_/g')
+        os_ver=$(sed --quiet "/managed-node1\:/,/^[^ ]/p" "$guests_yml" | sed --quiet --regexp-extended 's/^[ ]*VERSION\: (.*)/\1/p' | sed "s/'//g" | sed 's/ /_/g')
         vars_file_name=CentOS_$os_ver.yml
         # Set supported versions from vars files, first from RedHat.yml, then from OS's file
         for var_file in "$collection_vars_path"/RedHat.yml "$collection_vars_path"/"$vars_file_name"; do
             if [ -f "$var_file" ]; then
-                supported_versions=$(yq '."__mssql_supported_versions"[]' "$var_file")
+                supported_versions=$(sed --quiet "/__mssql_supported_versions\:/,/^[^ ]/p" "$var_file" | grep -o '[0-9]*')
             fi
         done
         for test_playbook in $test_playbooks; do
@@ -138,9 +140,9 @@ rlJournalStart
                 # shellcheck disable=SC2154
                 LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"-"$tmt_plan"-"$mssql_version"
                 if [ "$test_playbook" = "tests_configure_ha_cluster_external.yml" ]; then
-                    lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory_external" "$SKIP_TAGS" "" "$LOGFILE"
+                    lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory_external" "$SKIP_TAGS" "" "$LOGFILE" "$REPO_NAME"
                 elif [ "$test_playbook" = "tests_configure_ha_cluster_read_scale.yml" ]; then
-                    lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory_read_scale" "$SKIP_TAGS" "" "$LOGFILE"
+                    lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory_read_scale" "$SKIP_TAGS" "" "$LOGFILE" "$REPO_NAME"
                 fi
             done
         done

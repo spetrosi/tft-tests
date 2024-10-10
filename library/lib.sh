@@ -41,7 +41,7 @@ lsrInstallAnsible() {
         rlRun "dnf install python$PYTHON_VERSION -y"
         # selinux needed for delegate_to: localhost for file, copy, etc.
         # Providing passlib for password_hash module, see https://issues.redhat.com/browse/SYSROLES-81
-        rlRun "python$PYTHON_VERSION -m pip install ansible==$ANSIBLE_VER.* selinux passlib"
+        rlRun "python$PYTHON_VERSION -m pip install ansible==$ANSIBLE_VER.* selinux passlib rpm"
     else
         # el7
         rlRun "yum install python$PYTHON_VERSION-pip ansible-$ANSIBLE_VER.* -y"

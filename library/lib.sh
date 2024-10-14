@@ -174,7 +174,7 @@ lsrInstallDependencies() {
             rlLogInfo "Skipping installing dependencies from $req_file, this file doesn't exist"
             continue
         fi
-        rlRun "ansible-galaxy collection install -p $collection_path -vv -r $req_file"
+        rlWaitForCmd "ansible-galaxy collection install -p $collection_path -vv -r $req_file" -m 5
         rlLogInfo "$req_file Dependencies were successfully installed"
     done
 }
@@ -188,11 +188,11 @@ lsrEnableCallbackPlugins() {
         ansible_posix=$(mktemp --directory -t ansible_posix-XXX)
         cmd="ansible-galaxy collection install ansible.posix -p $ansible_posix -vv"
         if lsrIsAnsibleCmdOptionSupported "ansible-galaxy collection install" "--force-with-deps"; then
-            rlRun "$cmd --force-with-deps"
+            rlWaitForCmd "$cmd --force-with-deps" -m 5
         elif lsrIsAnsibleCmdOptionSupported "ansible-galaxy collection install" "--force"; then
-            rlRun "$cmd --force"
+            rlWaitForCmd "$cmd --force" -m 5
         else
-            rlRun "$cmd"
+            rlWaitForCmd "$cmd" -m 5
         fi
         if [ ! -d "$1"/"$callback_path"/ ]; then
             rlRun "mkdir -p $collection_path/$callback_path"

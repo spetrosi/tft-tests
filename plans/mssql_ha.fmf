@@ -8,7 +8,6 @@ provision:
     # This setting is ignored on artemis so we can keep it
     connection: system
     # Provision all machines in the same AWS pool to ensure that they are in the same subnet
-    pool: aws-testing-farm-09
   - name: managed-node1
     role: managed_node
     connection: system
@@ -30,6 +29,7 @@ provision:
   - name: virtualip-node1
     role: virtualip
     connection: system
+    pool: aws-testing-farm-09
 environment:
     ANSIBLE_VER: 2.17
     PYTHON_VERSION: 3.12

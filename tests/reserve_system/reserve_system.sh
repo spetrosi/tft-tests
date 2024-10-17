@@ -27,6 +27,8 @@ rlJournalStart
                 rlRun "ssh -i $control_node_key -o StrictHostKeyChecking=no root@$managed_node_ip 'cat /tmp/user_id_rsa_pub >> ~/.ssh/authorized_keys'"
             done
         fi
+        # Upload $guests_yml when running this test only
+        lsrUploadLogs "$guests_yml"
         sleep 301m &
     rlPhaseEnd
 rlJournalEnd

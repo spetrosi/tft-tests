@@ -27,7 +27,10 @@ rlJournalStart
         done
         # tmt_tree_provision is defined in lsrPrepTestVars
         # shellcheck disable=SC2154
-        lsrDistributeSSHKeys "$tmt_tree_provision"
+        is_virtual=$(lsrIsVirtual "$tmt_tree_provision")
+        if [ "$is_virtual" -eq 0 ]; then
+            lsrDistributeSSHKeys "$tmt_tree_provision"
+        fi
         # guests_yml is defined in lsrPrepTestVars
         # shellcheck disable=SC2154
         lsrSetHostname "$guests_yml"

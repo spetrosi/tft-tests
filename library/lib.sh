@@ -525,17 +525,21 @@ lsrGenerateTestDisks() {
     local tests_path=$1
     local provisionfmf="$tests_path"/provision.fmf
     local disk_provisioner_script=disk_provisioner.sh
-    local disk_provisioner_dir
+    local identity_file_arg=""
+    local disk_provisioner_dir control_node_name control_node_key node_ip ssh_cmd
     if ! lsrDiskProvisionerRequired "$tests_path"; then
         return 0
     fi
     managed_nodes=$(lsrGetManagedNodes "$guests_yml")
-    control_node_name=$(lsrGetNodeName "$guests_yml" "control-node")
-    control_node_key=$(lsrGetNodeKeyPrivate "$guests_yml" "$control_node_name")
-
+    is_virtual=$(lsrIsVirtual "$tmt_tree_provision")
+    if [ "$is_virtual" -eq 0 ]; then
+        control_node_name=$(lsrGetNodeName "$guests_yml" "control-node")
+        control_node_key=$(lsrGetNodeKeyPrivate "$guests_yml" "$control_node_name")
+        identity_file_arg="-i $control_node_key"
+    fi
     for managed_node in $managed_nodes; do
         node_ip=$(lsrGetNodeIp "$guests_yml" "$managed_node")
-        ssh_cmd="ssh -o StrictHostKeyChecking=no -i $control_node_key root@$node_ip"
+        ssh_cmd="ssh $identity_file_arg -o StrictHostKeyChecking=no root@$node_ip"
         rlRun "available=$($ssh_cmd 'df -k /tmp --output=avail | tail -1')"
         # available is defined above
         # shellcheck disable=SC2154
@@ -544,7 +548,7 @@ lsrGenerateTestDisks() {
         else
             disk_provisioner_dir=/var/tmp/disk_provisioner
         fi
-        rlRun "scp -o StrictHostKeyChecking=no -i $control_node_key $disk_provisioner_script $provisionfmf root@$node_ip:/tmp/"
+        rlRun "scp $identity_file_arg -o StrictHostKeyChecking=no $disk_provisioner_script $provisionfmf root@$node_ip:/tmp/"
         rlRun "$ssh_cmd \"WORK_DIR=$disk_provisioner_dir FMF_DIR=/tmp/ /tmp/$disk_provisioner_script start\""
         # Ensure that a new devices really exists
         rlRun "$ssh_cmd \"fdisk -l | grep 'Disk /dev/'\""

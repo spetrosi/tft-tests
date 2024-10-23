@@ -78,10 +78,11 @@ lsrGetRoleDir() {
 lsrGetTests() {
     local tests_path=$1
     local test_playbooks_all test_playbooks
-    test_playbooks_all=$(find "$tests_path" -maxdepth 1 -type f -name "tests_*.yml" -printf '%f\n')
+    test_playbooks_all=$(find "$tests_path" -maxdepth 1 -type f -name "tests_*.yml")
     if [ -n "$SYSTEM_ROLES_ONLY_TESTS" ]; then
         for test_playbook in $test_playbooks_all; do
-            if echo "$SYSTEM_ROLES_ONLY_TESTS" | grep -q "$test_playbook"; then
+            playbook_basename=$(basename "$test_playbook")
+            if echo "$SYSTEM_ROLES_ONLY_TESTS" | grep -q "$playbook_basename"; then
                 test_playbooks="$test_playbooks $test_playbook"
             fi
         done
@@ -91,7 +92,8 @@ lsrGetTests() {
     if [ -n "$SYSTEM_ROLES_EXCLUDE_TESTS" ]; then
         test_playbooks_excludes=""
         for test_playbook in $test_playbooks; do
-            if ! echo "$SYSTEM_ROLES_EXCLUDE_TESTS" | grep -q "$test_playbook"; then
+            playbook_basename=$(basename "$test_playbook")
+            if ! echo "$SYSTEM_ROLES_EXCLUDE_TESTS" | grep -q "$playbook_basename"; then
                 test_playbooks_excludes="$test_playbooks_excludes $test_playbook"
             fi
         done
@@ -387,20 +389,19 @@ lsrArrtoStr() {
 }
 
 lsrRunPlaybook() {
-    local tests_path=$1
-    local test_playbook=$2
-    local inventory=$3
-    local skip_tags=$4
-    local limit=$5
-    local LOGFILE=$6
-    local role_name=$7
+    local test_playbook=$1
+    local inventory=$2
+    local skip_tags=$3
+    local limit=$4
+    local LOGFILE=$5
     local result=FAIL
     local cmd log_msg
-    local ans_debug=""
+    local role_name
+    role_name=$(lsrGetRoleName "$test_playbook")
     if [ "${GET_PYTHON_MODULES:-}" = true ]; then
-        ans_debug="ANSIBLE_DEBUG=true"
+        ANSIBLE_ENVS[ANSIBLE_DEBUG]=true
     fi
-    cmd="$(lsrArrtoStr ANSIBLE_ENVS) $ans_debug ansible-playbook -i $inventory $skip_tags $limit $tests_path$test_playbook -vv"
+    cmd="$(lsrArrtoStr ANSIBLE_ENVS) ansible-playbook -i $inventory $skip_tags $limit $test_playbook -vv"
     log_msg="Test $test_playbook with ANSIBLE-$ANSIBLE_VER on ${limit/--limit /}"
     # If LSR_TFT_DEBUG is true, print output to terminal
     if [ "$LSR_TFT_DEBUG" == true ] || [ "$LSR_TFT_DEBUG" == True ]; then
@@ -421,16 +422,28 @@ lsrRunPlaybook() {
     fi
 }
 
+lsrGetRoleName() {
+    local test_playbook=$1
+    local parent_dir_abs parent_dir role_dir_abs
+    parent_dir_abs=$(dirname "$test_playbook")
+    parent_dir="${parent_dir_abs##*/}"
+    if [ "$parent_dir" = tests ]; then # legacy role format
+        role_dir_abs=$(dirname "$parent_dir_abs")
+        echo "${role_dir_abs##*.}"
+    else # collection format
+        echo "$parent_dir"
+    fi
+}
+
 lsrRunPlaybooksParallel() {
     # Run playbooks on managed nodes one by one
     # Supports running against a single node too
-    local tests_path=$1
-    local inventory=$2
-    local skip_tags=$3
-    local test_playbooks=$4
-    local managed_nodes=$5
-    local role_name=$6
-    local test_playbooks_arr
+    local inventory=$1
+    local skip_tags=$2
+    local test_playbooks=$3
+    local managed_nodes=$4
+    local rolename_in_logfile
+    local role_name test_playbooks_arr
 
     read -ra test_playbooks_arr <<< "$test_playbooks"
     while [ "${#test_playbooks_arr[*]}" -gt 0 ]; do
@@ -438,8 +451,14 @@ lsrRunPlaybooksParallel() {
             if ! pgrep -af "ansible-playbook" | grep -q "\--limit $managed_node\s"; then
                 test_playbook=${test_playbooks_arr[0]}
                 test_playbooks_arr=("${test_playbooks_arr[@]:1}") # Remove first element from array
-                LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"-$tmt_plan
-                lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory" "$skip_tags" "--limit $managed_node" "$LOGFILE" "$role_name" &
+                playbook_basename=$(basename "$test_playbook")
+                if [ "$rolename_in_logfile" == true ] || [ "$rolename_in_logfile" == True ]; then
+                    role_name=$(lsrGetRoleName "$test_playbook")
+                    LOGFILE="$role_name"-"${playbook_basename%.*}"-ANSIBLE-"$ANSIBLE_VER"-$tmt_plan
+                else
+                    LOGFILE="${playbook_basename%.*}"-ANSIBLE-"$ANSIBLE_VER"-$tmt_plan
+                fi
+                lsrRunPlaybook "$test_playbook" "$inventory" "$skip_tags" "--limit $managed_node" "$LOGFILE" &
                 sleep 1
                 break
             fi
@@ -576,13 +595,12 @@ lsrMssqlHaUpdateInventory() {
 # prepare test playbooks for gathering information about python
 # module usage
 lsrSetupGetPythonModules() {
-    local tests_dir test_pb
-    tests_dir="$1"; shift
-    for test_pb in "$@"; do
-        cp "$tests_dir$test_pb" "$tests_dir$test_pb.orig"
+    local test_pbs=$1
+    for test_pb in $test_pbs; do
+        cp "$test_pb" "$test_pb.orig"
         sed -e '/^  hosts:/a\
   environment:\
-    PYTHONVERBOSE: "1"' -i "$tests_dir$test_pb"
+    PYTHONVERBOSE: "1"' -i "$test_pb"
     done
 }
 

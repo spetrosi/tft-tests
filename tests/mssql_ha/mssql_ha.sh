@@ -72,13 +72,11 @@ rlJournalStart
         lsrGetRoleDir "$REPO_NAME"
         # role_path is defined in lsrGetRoleDir
         # shellcheck disable=SC2154
-        test_playbooks=$(lsrGetTests "$role_path"/tests)
+        legacy_test_path="$role_path"/tests
+        test_playbooks=$(lsrGetTests "$legacy_test_path")
         rlLogInfo "Test playbooks: $test_playbooks"
-        if [ -z "$test_playbooks" ]; then
-            rlDie "No test playbooks found"
-        fi
         for test_playbook in $test_playbooks; do
-            lsrHandleVault "$role_path/tests/$test_playbook"
+            lsrHandleVault "$test_playbook"
         done
         lsrSetAnsibleGathering "$ANSIBLE_GATHERING"
         lsrGetCollectionPath
@@ -117,6 +115,7 @@ rlJournalStart
         fi
         # Replace mssql_ha_virtual_ip with our virtualip value
         tests_path="$collection_path"/ansible_collections/fedora/linux_system_roles/tests/"$REPO_NAME"/
+        test_playbooks=$(lsrGetTests "$tests_path")
         collection_role_path="$collection_path"/ansible_collections/fedora/linux_system_roles/roles/"$REPO_NAME"
         collection_vars_path="$collection_role_path"/vars
         sed -i "s/mssql_ha_virtual_ip: .*/mssql_ha_virtual_ip: $virtualip/g" "$tests_path"/tests_configure_ha_cluster_external.yml
@@ -132,17 +131,18 @@ rlJournalStart
             fi
         done
         for test_playbook in $test_playbooks; do
+            test_playbook_basename=$(basename "$test_playbook")
             for mssql_version in $supported_versions; do
                 # Replace mssql_version value to one of the supported versions
-                sed -i "s/mssql_version.*$/mssql_version: $mssql_version/g" "$tests_path/$test_playbook"
-                rlRun "grep '^ *mssql_version:' $tests_path/$test_playbook"
+                sed -i "s/mssql_version.*$/mssql_version: $mssql_version/g" "$test_playbook"
+                rlRun "grep '^ *mssql_version:' $test_playbook"
                 # tmt_plan is assigned at lsrPrepTestVars
                 # shellcheck disable=SC2154
-                LOGFILE="${test_playbook%.*}"-ANSIBLE-"$ANSIBLE_VER"-"$tmt_plan"-"$mssql_version"
-                if [ "$test_playbook" = "tests_configure_ha_cluster_external.yml" ]; then
-                    lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory_external" "$SKIP_TAGS" "" "$LOGFILE" "$REPO_NAME"
-                elif [ "$test_playbook" = "tests_configure_ha_cluster_read_scale.yml" ]; then
-                    lsrRunPlaybook "$tests_path" "$test_playbook" "$inventory_read_scale" "$SKIP_TAGS" "" "$LOGFILE" "$REPO_NAME"
+                LOGFILE="${test_playbook_basename%.*}"-ANSIBLE-"$ANSIBLE_VER"-"$tmt_plan"-"$mssql_version"
+                if [ "$test_playbook_basename" = "tests_configure_ha_cluster_external.yml" ]; then
+                    lsrRunPlaybook "$test_playbook" "$inventory_external" "$SKIP_TAGS" "" "$LOGFILE"
+                elif [ "$test_playbook_basename" = "tests_configure_ha_cluster_read_scale.yml" ]; then
+                    lsrRunPlaybook "$test_playbook" "$inventory_read_scale" "$SKIP_TAGS" "" "$LOGFILE"
                 fi
             done
         done

@@ -74,14 +74,12 @@ rlJournalStart
         lsrGetRoleDir "$REPO_NAME"
         # role_path is defined in lsrGetRoleDir
         # shellcheck disable=SC2154
-        lsrGenerateTestDisks "$role_path"/tests
-        test_playbooks=$(lsrGetTests "$role_path"/tests)
+        legacy_test_path="$role_path"/tests
+        lsrGenerateTestDisks "$legacy_test_path"
+        test_playbooks=$(lsrGetTests "$legacy_test_path")
         rlLogInfo "Test playbooks: $test_playbooks"
-        if [ -z "$test_playbooks" ]; then
-            rlDie "No test playbooks found"
-        fi
         for test_playbook in $test_playbooks; do
-            lsrHandleVault "$role_path/tests/$test_playbook"
+            lsrHandleVault "$test_playbook"
         done
         lsrSetAnsibleGathering "$ANSIBLE_GATHERING"
         lsrGetCollectionPath
@@ -95,13 +93,14 @@ rlJournalStart
         inventory=$(lsrPrepareInventoryVars "$tmt_tree_provision" "$guests_yml")
         rlRun "cat $inventory"
         tests_path="$collection_path"/ansible_collections/fedora/linux_system_roles/tests/"$REPO_NAME"/
+        test_playbooks=$(lsrGetTests "$tests_path")
         if [ "${GET_PYTHON_MODULES:-}" = true ]; then
             # shellcheck disable=SC2086
-            lsrSetupGetPythonModules "$tests_path" $test_playbooks
+            lsrSetupGetPythonModules "$test_playbooks"
         fi
     rlPhaseEnd
     rlPhaseStartTest
         managed_nodes=$(lsrGetManagedNodes "$guests_yml")
-        lsrRunPlaybooksParallel "$tests_path" "$inventory" "$SKIP_TAGS" "$test_playbooks" "$managed_nodes"
+        lsrRunPlaybooksParallel "$inventory" "$SKIP_TAGS" "$test_playbooks" "$managed_nodes" "false"
     rlPhaseEnd
 rlJournalEnd

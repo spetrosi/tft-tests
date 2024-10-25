@@ -397,7 +397,7 @@ lsrRunPlaybook() {
     local result=FAIL
     local cmd log_msg
     local role_name
-    role_name=$(lsrGetRoleName "$test_playbook")
+    role_name=$(lsrGetRoleNameFromTestPlaybook "$test_playbook")
     if [ "${GET_PYTHON_MODULES:-}" = true ]; then
         ANSIBLE_ENVS[ANSIBLE_DEBUG]=true
     fi
@@ -422,17 +422,23 @@ lsrRunPlaybook() {
     fi
 }
 
-lsrGetRoleName() {
-    local test_playbook=$1
-    local parent_dir_abs parent_dir role_dir_abs
-    parent_dir_abs=$(dirname "$test_playbook")
-    parent_dir="${parent_dir_abs##*/}"
-    if [ "$parent_dir" = tests ]; then # legacy role format
-        role_dir_abs=$(dirname "$parent_dir_abs")
-        echo "${role_dir_abs##*.}"
+lsrGetRoleNameFromTestsPath() {
+    local tests_path=$1
+    local test_dir role_dir_abs
+    test_dir=$(basename "$tests_path")
+    if [ "$test_dir" = tests ]; then # legacy role format
+        role_dir_abs=$(dirname "$tests_path")
+        basename "$role_dir_abs"
     else # collection format
-        echo "$parent_dir"
+        echo "$test_dir"
     fi
+}
+
+lsrGetRoleNameFromTestPlaybook() {
+    local test_playbook=$1
+    local tests_path
+    tests_path=$(dirname "$test_playbook")
+    lsrGetRoleNameFromTestsPath "$tests_path"
 }
 
 lsrRunPlaybooksParallel() {
@@ -453,7 +459,7 @@ lsrRunPlaybooksParallel() {
                 test_playbooks_arr=("${test_playbooks_arr[@]:1}") # Remove first element from array
                 playbook_basename=$(basename "$test_playbook")
                 if [ "$rolename_in_logfile" == true ] || [ "$rolename_in_logfile" == True ]; then
-                    role_name=$(lsrGetRoleName "$test_playbook")
+                    role_name=$(lsrGetRoleNameFromTestPlaybook "$test_playbook")
                     LOGFILE="$role_name"-"${playbook_basename%.*}"-ANSIBLE-"$ANSIBLE_VER"-$tmt_plan
                 else
                     LOGFILE="${playbook_basename%.*}"-ANSIBLE-"$ANSIBLE_VER"-$tmt_plan

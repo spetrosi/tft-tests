@@ -257,12 +257,14 @@ lsrConvertToCollection() {
 
 lsrGetManagedNodes() {
     local guests_yml=$1
-    sed --quiet --regexp-extended 's/(^managed.*):$/\1/p' "$guests_yml" | sort
+    # xargs to return space-separated string
+    sed --quiet --regexp-extended 's/(^managed.*):$/\1/p' "$guests_yml" | sort | xargs
 }
 
 lsrGetNodes() {
     local guests_yml=$1
-    sed --quiet --regexp-extended 's/(^[^ ]*):$/\1/p' "$guests_yml" | sort
+    # xargs to return space-separated string
+    sed --quiet --regexp-extended 's/(^[^ ]*):$/\1/p' "$guests_yml" | sort | xargs
 }
 
 lsrGetNodeName() {

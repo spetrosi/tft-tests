@@ -550,12 +550,16 @@ lsrDiskProvisionerRequired() {
 
 lsrGenerateTestDisks() {
     local tests_path=$1
+    local action=$2
     local provisionfmf="$tests_path"/provision.fmf
     local disk_provisioner_script=disk_provisioner.sh
     local identity_file_arg=""
     local disk_provisioner_dir control_node_name control_node_key node_ip ssh_cmd
     if ! lsrDiskProvisionerRequired "$tests_path"; then
         return 0
+    fi
+    if [ "$action" != start ] && [ "$action" != stop ]; then
+        rlDie "With lsrGenerateTestDisks, action must be either start or stop. Provided action: $action"
     fi
     managed_nodes=$(lsrGetManagedNodes "$guests_yml")
     is_virtual=$(lsrIsVirtual "$tmt_tree_provision")
@@ -576,8 +580,12 @@ lsrGenerateTestDisks() {
             disk_provisioner_dir=/var/tmp/disk_provisioner
         fi
         rlRun "scp $identity_file_arg -o StrictHostKeyChecking=no $disk_provisioner_script $provisionfmf root@$node_ip:/tmp/"
-        rlRun "$ssh_cmd \"WORK_DIR=$disk_provisioner_dir FMF_DIR=/tmp/ /tmp/$disk_provisioner_script start\""
-        # Ensure that a new devices really exists
+        if [ "$action" == start ]; then
+            rlRun "$ssh_cmd \"WORK_DIR=$disk_provisioner_dir FMF_DIR=/tmp/ /tmp/$disk_provisioner_script start\""
+        else
+            rlRun "$ssh_cmd \"WORK_DIR=$disk_provisioner_dir /tmp/$disk_provisioner_script stop\""
+        fi
+        # Print devices
         rlRun "$ssh_cmd \"fdisk -l | grep 'Disk /dev/'\""
         rlRun "$ssh_cmd \"lsblk -l | cut -d\  -f1 | grep -v NAME | sed 's/^/\/dev\//' | xargs ls -l\""
     done

@@ -10,19 +10,23 @@ provision:
   - name: managed-node1
     role: managed_node
     connection: system
-  - name: managed-node2
-    role: managed_node
-    connection: system
-  - name: managed-node3
-    role: managed_node
-    connection: system
+    hardware:
+      network:
+        - type: eth
+        - type: eth
+  # - name: managed-node2
+  #   role: managed_node
+  #   connection: system
+  # - name: managed-node3
+  #   role: managed_node
+  #   connection: system
 environment:
     ANSIBLE_VER: 2.17
-    REPO_NAME: ""
+    REPO_NAME: network
     PYTHON_VERSION: 3.12
-    SYSTEM_ROLES_ONLY_TESTS: ""
+    SYSTEM_ROLES_ONLY_TESTS: tests_default.yml
     TEST_LOCAL_CHANGES: false
-    PR_NUM: ""
+    PR_NUM: 751
     LINUXSYSTEMROLES_USER: ""
     LINUXSYSTEMROLES_DOMAIN: ""
     LINUXSYSTEMROLES_SSH_KEY: ""
@@ -59,9 +63,9 @@ discover:
   # Uncomment this step for troubleshooting
   # This is required because currently testing-farm cli doesn't support running multi-node plans
   # You can set ID_RSA_PUB in the environment section above to your public key to distribute it to nodes
-  # - name: Inject your ssh public key to test systems
-  #   how: fmf
-  #   where: control_node
-  #   filter: tag:reserve_system
+  - name: Inject your ssh public key to test systems
+    how: fmf
+    where: control_node
+    filter: tag:reserve_system
 execute:
     how: tmt
